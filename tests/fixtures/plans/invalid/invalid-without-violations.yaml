@@ -1,0 +1,17 @@
+schema_version: "1.0"
+kind: TestPlan
+metadata:
+  name: invalid-without-violations
+  generator:
+    type: manual
+target:
+  spec_id: demo-items-v1
+scenarios:
+  - id: missing-violation-declaration
+    steps:
+      - id: create
+        operation_id: createItem
+        request:
+          mode: intentionally_invalid
+          body:
+            price: 10.0

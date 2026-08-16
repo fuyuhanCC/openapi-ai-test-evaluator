@@ -1,0 +1,244 @@
+schema_version: "1.0"
+kind: TestPlan
+
+metadata:
+  name: metamorphic-relations
+  description: Explicit replayable examples of all six V1 metamorphic relations.
+  generator:
+    type: metamorphic
+
+target:
+  spec_id: demo-items-v1
+
+scenarios:
+  - id: mr1-repeated-read
+    setup:
+      - id: create-item
+        operation_id: createItem
+        request:
+          body:
+            name: Stable Item
+            price: 10.0
+            status: active
+        extract:
+          - variable: item_id
+            source: response.body
+            pointer: /id
+    steps:
+      - id: first-read
+        operation_id: getItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+      - id: second-read
+        operation_id: getItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+    relations:
+      - id: stable-fields
+        type: repeated_read_consistency
+        source_step: first-read
+        follow_up_step: second-read
+        compare_pointers: [/id, /name, /price, /status]
+        ignore_pointers: [/updatedAt]
+    cleanup:
+      - id: cleanup-item
+        operation_id: deleteItem
+        ignore_errors: true
+        request:
+          path:
+            itemId:
+              $var: item_id
+
+  - id: mr2-query-order
+    steps:
+      - id: first-query
+        operation_id: listItems
+        request:
+          query:
+            - name: status
+              value: active
+            - name: category
+              value: book
+      - id: reordered-query
+        operation_id: listItems
+        request:
+          query:
+            - name: category
+              value: book
+            - name: status
+              value: active
+    relations:
+      - id: equivalent-results
+        type: query_parameter_order_invariance
+        source_step: first-query
+        follow_up_step: reordered-query
+        collection_pointer: /items
+        item_key_pointer: /id
+
+  - id: mr3-pagination
+    steps:
+      - id: small-page
+        operation_id: listItems
+        request:
+          query:
+            - name: offset
+              value: 0
+            - name: limit
+              value: 5
+      - id: large-page
+        operation_id: listItems
+        request:
+          query:
+            - name: offset
+              value: 0
+            - name: limit
+              value: 10
+    relations:
+      - id: small-page-contained
+        type: pagination_monotonicity
+        source_step: small-page
+        follow_up_step: large-page
+        collection_pointer: /items
+        item_key_pointer: /id
+        mode: subset
+
+  - id: mr4-create-read
+    steps:
+      - id: create
+        operation_id: createItem
+        request:
+          body:
+            name: Created Item
+            price: 10.0
+            status: active
+        extract:
+          - variable: item_id
+            source: response.body
+            pointer: /id
+      - id: read
+        operation_id: getItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+    relations:
+      - id: created-fields-readable
+        type: create_read_consistency
+        source_step: create
+        follow_up_step: read
+        field_pairs:
+          - source:
+              location: request.body
+              pointer: /name
+            follow_up:
+              location: response.body
+              pointer: /name
+          - source:
+              location: request.body
+              pointer: /price
+            follow_up:
+              location: response.body
+              pointer: /price
+    cleanup:
+      - id: cleanup-created
+        operation_id: deleteItem
+        ignore_errors: true
+        request:
+          path:
+            itemId:
+              $var: item_id
+
+  - id: mr5-update-read
+    setup:
+      - id: create-item
+        operation_id: createItem
+        request:
+          body:
+            name: Before Update
+            price: 10.0
+            status: active
+        extract:
+          - variable: item_id
+            source: response.body
+            pointer: /id
+    steps:
+      - id: update
+        operation_id: updateItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+          body:
+            name: After Update
+      - id: read-updated
+        operation_id: getItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+    relations:
+      - id: updated-fields-visible
+        type: update_read_consistency
+        source_step: update
+        follow_up_step: read-updated
+        field_pairs:
+          - source:
+              location: request.body
+              pointer: /name
+            follow_up:
+              location: response.body
+              pointer: /name
+        stable_follow_up_pointers: [/id]
+    cleanup:
+      - id: cleanup-updated
+        operation_id: deleteItem
+        ignore_errors: true
+        request:
+          path:
+            itemId:
+              $var: item_id
+
+  - id: mr6-delete-read
+    setup:
+      - id: create-item
+        operation_id: createItem
+        request:
+          body:
+            name: Deleted Item
+            price: 10.0
+            status: active
+        extract:
+          - variable: item_id
+            source: response.body
+            pointer: /id
+    steps:
+      - id: delete
+        operation_id: deleteItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+      - id: read-deleted
+        operation_id: getItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+    relations:
+      - id: deleted-item-unavailable
+        type: delete_read_consistency
+        source_step: delete
+        follow_up_step: read-deleted
+        accepted_follow_up_statuses: [404, 410]
+    cleanup:
+      - id: cleanup-deleted
+        operation_id: deleteItem
+        ignore_errors: true
+        request:
+          path:
+            itemId:
+              $var: item_id

@@ -1,0 +1,33 @@
+schema_version: "1.0"
+kind: TestPlan
+
+metadata:
+  name: minimal-get
+  description: Smallest structurally valid read-only TestPlan.
+  generator:
+    type: manual
+
+target:
+  spec_id: demo-items-v1
+
+defaults:
+  timeout_ms: 5000
+  headers:
+    Accept: application/json
+
+scenarios:
+  - id: list-items
+    name: List all items
+    tags: [smoke, read-only]
+    steps:
+      - id: list
+        operation_id: listItems
+        request:
+          mode: conformant
+          query: []
+        assertions:
+          - id: status-ok
+            operator: status_is
+            expected: 200
+          - id: response-valid
+            operator: schema_matches

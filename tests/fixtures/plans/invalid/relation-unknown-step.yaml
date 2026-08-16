@@ -1,0 +1,19 @@
+schema_version: "1.0"
+kind: TestPlan
+metadata:
+  name: relation-unknown-step
+  generator:
+    type: manual
+target:
+  spec_id: demo-items-v1
+scenarios:
+  - id: broken-relation
+    steps:
+      - id: first-read
+        operation_id: getItem
+    relations:
+      - id: stable-fields
+        type: repeated_read_consistency
+        source_step: first-read
+        follow_up_step: missing-read
+        compare_pointers: [/id]

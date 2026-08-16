@@ -1,0 +1,99 @@
+schema_version: "1.0"
+kind: TestPlan
+
+metadata:
+  name: all-methods
+  description: Exercise GET, POST, PUT, PATCH, and DELETE in one isolated scenario.
+  generator:
+    type: manual
+
+target:
+  spec_id: demo-items-v1
+
+variables:
+  initial_name: Test Item
+  replacement_name: Replaced Item
+  patched_name: Patched Item
+
+scenarios:
+  - id: all-methods-lifecycle
+    tags: [contract, stateful]
+    steps:
+      - id: create
+        operation_id: createItem
+        request:
+          body:
+            name:
+              $var: initial_name
+            price: 10.0
+            status: active
+        extract:
+          - variable: item_id
+            source: response.body
+            pointer: /id
+            required: true
+        assertions:
+          - operator: status_is
+            expected: 201
+          - operator: schema_matches
+
+      - id: read
+        operation_id: getItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+
+      - id: replace
+        operation_id: replaceItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+          body:
+            name:
+              $var: replacement_name
+            price: 20.0
+            status: inactive
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+
+      - id: patch
+        operation_id: updateItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+          body:
+            name:
+              $var: patched_name
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+
+      - id: delete
+        operation_id: deleteItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+        assertions:
+          - operator: status_is
+            expected: 204
+
+    cleanup:
+      - id: cleanup-item
+        operation_id: deleteItem
+        when: always
+        ignore_errors: true
+        request:
+          path:
+            itemId:
+              $var: item_id

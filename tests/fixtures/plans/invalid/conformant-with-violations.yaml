@@ -1,0 +1,19 @@
+schema_version: "1.0"
+kind: TestPlan
+metadata:
+  name: conformant-with-violations
+  generator:
+    type: manual
+target:
+  spec_id: demo-items-v1
+scenarios:
+  - id: invalid-request-intent
+    steps:
+      - id: create
+        operation_id: createItem
+        request:
+          mode: conformant
+          expected_violations:
+            - code: missing_required
+              location: body
+              field: name

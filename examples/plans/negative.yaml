@@ -1,0 +1,78 @@
+schema_version: "1.0"
+kind: TestPlan
+
+metadata:
+  name: negative-cases
+  description: Distinguish intentional schema violations from valid domain-negative requests.
+  generator:
+    type: manual
+
+target:
+  spec_id: demo-items-v1
+
+scenarios:
+  - id: missing-required-field
+    steps:
+      - id: create-without-name
+        operation_id: createItem
+        request:
+          mode: intentionally_invalid
+          expected_violations:
+            - code: missing_required
+              location: body
+              field: name
+          body:
+            price: 10.0
+            status: active
+        assertions:
+          - operator: status_is
+            expected: 400
+          - operator: schema_matches
+
+  - id: invalid-field-type
+    steps:
+      - id: create-with-string-price
+        operation_id: createItem
+        request:
+          mode: intentionally_invalid
+          expected_violations:
+            - code: type_mismatch
+              location: body
+              field: price
+          body:
+            name: Invalid Price
+            price: not-a-number
+            status: active
+        assertions:
+          - operator: status_is
+            expected: 400
+
+  - id: invalid-enum
+    steps:
+      - id: create-with-invalid-status
+        operation_id: createItem
+        request:
+          mode: intentionally_invalid
+          expected_violations:
+            - code: invalid_enum
+              location: body
+              field: status
+          body:
+            name: Invalid Status
+            price: 10.0
+            status: archived
+        assertions:
+          - operator: status_is
+            expected: 400
+
+  - id: unknown-resource
+    steps:
+      - id: read-unknown-item
+        operation_id: getItem
+        request:
+          mode: conformant
+          path:
+            itemId: 999999999
+        assertions:
+          - operator: status_is
+            expected: 404

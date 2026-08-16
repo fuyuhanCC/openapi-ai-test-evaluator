@@ -1,0 +1,191 @@
+schema_version: "1.0"
+kind: TestPlan
+
+metadata:
+  name: lifecycle-scenarios
+  description: Representative multi-step workflows with response extraction.
+  generator:
+    type: manual
+
+target:
+  spec_id: demo-items-v1
+
+scenarios:
+  - id: create-read
+    tags: [stateful, create, read]
+    steps:
+      - id: create
+        operation_id: createItem
+        request:
+          body:
+            name: Created Item
+            price: 10.0
+            status: active
+        extract:
+          - variable: item_id
+            source: response.body
+            pointer: /id
+        assertions:
+          - operator: status_is
+            expected: 201
+      - id: read-created
+        operation_id: getItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: equals
+            actual:
+              source: response.body
+              pointer: /name
+            expected: Created Item
+    cleanup:
+      - id: cleanup-created
+        operation_id: deleteItem
+        ignore_errors: true
+        request:
+          path:
+            itemId:
+              $var: item_id
+
+  - id: create-update-read
+    tags: [stateful, update]
+    steps:
+      - id: create
+        operation_id: createItem
+        request:
+          body:
+            name: Before Update
+            price: 10.0
+            status: active
+        extract:
+          - variable: item_id
+            source: response.body
+            pointer: /id
+      - id: update
+        operation_id: updateItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+          body:
+            name: After Update
+        assertions:
+          - operator: status_is
+            expected: 200
+      - id: read-updated
+        operation_id: getItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+        assertions:
+          - operator: equals
+            actual:
+              source: response.body
+              pointer: /name
+            expected: After Update
+    cleanup:
+      - id: cleanup-updated
+        operation_id: deleteItem
+        ignore_errors: true
+        request:
+          path:
+            itemId:
+              $var: item_id
+
+  - id: create-delete-read
+    tags: [stateful, delete]
+    steps:
+      - id: create
+        operation_id: createItem
+        request:
+          body:
+            name: Item To Delete
+            price: 10.0
+            status: active
+        extract:
+          - variable: item_id
+            source: response.body
+            pointer: /id
+      - id: delete
+        operation_id: deleteItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+        assertions:
+          - operator: status_is
+            expected: 204
+      - id: read-deleted
+        operation_id: getItem
+        request:
+          path:
+            itemId:
+              $var: item_id
+        assertions:
+          - operator: status_is
+            expected: 404
+    cleanup:
+      - id: cleanup-deleted
+        operation_id: deleteItem
+        ignore_errors: true
+        request:
+          path:
+            itemId:
+              $var: item_id
+
+  - id: list-select-read
+    tags: [stateful, collection]
+    steps:
+      - id: list
+        operation_id: listItems
+        extract:
+          - variable: selected_item_id
+            source: response.body
+            pointer: /items/0/id
+      - id: read-selected
+        operation_id: getItem
+        request:
+          path:
+            itemId:
+              $var: selected_item_id
+        assertions:
+          - operator: status_is
+            expected: 200
+
+  - id: create-list-presence
+    tags: [stateful, collection]
+    steps:
+      - id: create
+        operation_id: createItem
+        request:
+          body:
+            name: Listed Item
+            price: 10.0
+            status: active
+        extract:
+          - variable: item_id
+            source: response.body
+            pointer: /id
+      - id: list-after-create
+        operation_id: listItems
+        assertions:
+          - operator: contains
+            actual:
+              source: response.body
+              pointer: /items
+            expected:
+              id:
+                $var: item_id
+    cleanup:
+      - id: cleanup-listed
+        operation_id: deleteItem
+        ignore_errors: true
+        request:
+          path:
+            itemId:
+              $var: item_id

@@ -1,0 +1,759 @@
+{
+  "$defs": {
+    "Assertion": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "operator": {
+          "$ref": "#/$defs/AssertionOperator"
+        },
+        "actual": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResponseSelector"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "expected": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "operator"
+      ],
+      "title": "Assertion",
+      "type": "object"
+    },
+    "AssertionOperator": {
+      "enum": [
+        "status_is",
+        "schema_matches",
+        "equals",
+        "not_equals",
+        "exists",
+        "contains",
+        "length_is",
+        "greater_than",
+        "matches_pattern"
+      ],
+      "title": "AssertionOperator",
+      "type": "string"
+    },
+    "CleanupStep": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "operation_id": {
+          "minLength": 1,
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/RequestDefinition"
+        },
+        "extract": {
+          "items": {
+            "$ref": "#/$defs/Extraction"
+          },
+          "title": "Extract",
+          "type": "array"
+        },
+        "assertions": {
+          "items": {
+            "$ref": "#/$defs/Assertion"
+          },
+          "title": "Assertions",
+          "type": "array"
+        },
+        "when": {
+          "$ref": "#/$defs/CleanupWhen",
+          "default": "always"
+        },
+        "ignore_errors": {
+          "default": false,
+          "title": "Ignore Errors",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "operation_id"
+      ],
+      "title": "CleanupStep",
+      "type": "object"
+    },
+    "CleanupWhen": {
+      "enum": [
+        "always",
+        "on_success",
+        "on_failure"
+      ],
+      "title": "CleanupWhen",
+      "type": "string"
+    },
+    "ExpectedViolation": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ViolationCode"
+        },
+        "location": {
+          "enum": [
+            "body",
+            "path",
+            "query",
+            "header"
+          ],
+          "title": "Location",
+          "type": "string"
+        },
+        "field": {
+          "minLength": 1,
+          "title": "Field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "location",
+        "field"
+      ],
+      "title": "ExpectedViolation",
+      "type": "object"
+    },
+    "Extraction": {
+      "additionalProperties": false,
+      "properties": {
+        "variable": {
+          "minLength": 1,
+          "title": "Variable",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "response.body",
+            "response.headers"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "pointer": {
+          "pattern": "^(|/.*)$",
+          "title": "Pointer",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "variable",
+        "source",
+        "pointer"
+      ],
+      "title": "Extraction",
+      "type": "object"
+    },
+    "GeneratorMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/GeneratorType"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "prompt_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Version"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "GeneratorMetadata",
+      "type": "object"
+    },
+    "GeneratorType": {
+      "enum": [
+        "manual",
+        "rule",
+        "deepseek",
+        "metamorphic"
+      ],
+      "title": "GeneratorType",
+      "type": "string"
+    },
+    "JsonValue": {},
+    "MetamorphicRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/RelationType"
+        },
+        "source_step": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Source Step",
+          "type": "string"
+        },
+        "follow_up_step": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Follow Up Step",
+          "type": "string"
+        },
+        "compare_pointers": {
+          "items": {
+            "pattern": "^(|/.*)$",
+            "type": "string"
+          },
+          "title": "Compare Pointers",
+          "type": "array"
+        },
+        "ignore_pointers": {
+          "items": {
+            "pattern": "^(|/.*)$",
+            "type": "string"
+          },
+          "title": "Ignore Pointers",
+          "type": "array"
+        },
+        "collection_pointer": {
+          "anyOf": [
+            {
+              "pattern": "^(|/.*)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Collection Pointer"
+        },
+        "item_key_pointer": {
+          "anyOf": [
+            {
+              "pattern": "^(|/.*)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Item Key Pointer"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PaginationMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "field_pairs": {
+          "items": {
+            "$ref": "#/$defs/RelationFieldPair"
+          },
+          "title": "Field Pairs",
+          "type": "array"
+        },
+        "stable_follow_up_pointers": {
+          "items": {
+            "pattern": "^(|/.*)$",
+            "type": "string"
+          },
+          "title": "Stable Follow Up Pointers",
+          "type": "array"
+        },
+        "accepted_follow_up_statuses": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Accepted Follow Up Statuses",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "source_step",
+        "follow_up_step"
+      ],
+      "title": "MetamorphicRelation",
+      "type": "object"
+    },
+    "PaginationMode": {
+      "enum": [
+        "subset",
+        "prefix"
+      ],
+      "title": "PaginationMode",
+      "type": "string"
+    },
+    "PlanDefaults": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "default": 5000,
+          "maximum": 120000,
+          "minimum": 1,
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Headers",
+          "type": "object"
+        }
+      },
+      "title": "PlanDefaults",
+      "type": "object"
+    },
+    "PlanMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "generator": {
+          "$ref": "#/$defs/GeneratorMetadata"
+        }
+      },
+      "required": [
+        "name",
+        "generator"
+      ],
+      "title": "PlanMetadata",
+      "type": "object"
+    },
+    "QueryParameter": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "title": "QueryParameter",
+      "type": "object"
+    },
+    "RelationFieldPair": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/RelationFieldReference"
+        },
+        "follow_up": {
+          "$ref": "#/$defs/RelationFieldReference"
+        }
+      },
+      "required": [
+        "source",
+        "follow_up"
+      ],
+      "title": "RelationFieldPair",
+      "type": "object"
+    },
+    "RelationFieldReference": {
+      "additionalProperties": false,
+      "properties": {
+        "location": {
+          "enum": [
+            "request.body",
+            "response.body",
+            "response.status"
+          ],
+          "title": "Location",
+          "type": "string"
+        },
+        "pointer": {
+          "anyOf": [
+            {
+              "pattern": "^(|/.*)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pointer"
+        }
+      },
+      "required": [
+        "location"
+      ],
+      "title": "RelationFieldReference",
+      "type": "object"
+    },
+    "RelationType": {
+      "enum": [
+        "repeated_read_consistency",
+        "query_parameter_order_invariance",
+        "pagination_monotonicity",
+        "create_read_consistency",
+        "update_read_consistency",
+        "delete_read_consistency"
+      ],
+      "title": "RelationType",
+      "type": "string"
+    },
+    "RequestDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/RequestMode",
+          "default": "conformant"
+        },
+        "expected_violations": {
+          "items": {
+            "$ref": "#/$defs/ExpectedViolation"
+          },
+          "title": "Expected Violations",
+          "type": "array"
+        },
+        "path": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Path",
+          "type": "object"
+        },
+        "query": {
+          "items": {
+            "$ref": "#/$defs/QueryParameter"
+          },
+          "title": "Query",
+          "type": "array"
+        },
+        "headers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Headers",
+          "type": "object"
+        },
+        "body": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "RequestDefinition",
+      "type": "object"
+    },
+    "RequestMode": {
+      "enum": [
+        "conformant",
+        "intentionally_invalid"
+      ],
+      "title": "RequestMode",
+      "type": "string"
+    },
+    "RequestStep": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "operation_id": {
+          "minLength": 1,
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/RequestDefinition"
+        },
+        "extract": {
+          "items": {
+            "$ref": "#/$defs/Extraction"
+          },
+          "title": "Extract",
+          "type": "array"
+        },
+        "assertions": {
+          "items": {
+            "$ref": "#/$defs/Assertion"
+          },
+          "title": "Assertions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "operation_id"
+      ],
+      "title": "RequestStep",
+      "type": "object"
+    },
+    "ResponseSelector": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "response.body",
+            "response.headers",
+            "response.status"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "pointer": {
+          "anyOf": [
+            {
+              "pattern": "^(|/.*)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pointer"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ResponseSelector",
+      "type": "object"
+    },
+    "Scenario": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "setup": {
+          "items": {
+            "$ref": "#/$defs/RequestStep"
+          },
+          "title": "Setup",
+          "type": "array"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/RequestStep"
+          },
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        },
+        "cleanup": {
+          "items": {
+            "$ref": "#/$defs/CleanupStep"
+          },
+          "title": "Cleanup",
+          "type": "array"
+        },
+        "relations": {
+          "items": {
+            "$ref": "#/$defs/MetamorphicRelation"
+          },
+          "title": "Relations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "steps"
+      ],
+      "title": "Scenario",
+      "type": "object"
+    },
+    "Target": {
+      "additionalProperties": false,
+      "properties": {
+        "spec_id": {
+          "minLength": 1,
+          "title": "Spec Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "spec_id"
+      ],
+      "title": "Target",
+      "type": "object"
+    },
+    "ViolationCode": {
+      "enum": [
+        "missing_required",
+        "type_mismatch",
+        "invalid_enum",
+        "out_of_range",
+        "invalid_format",
+        "additional_property"
+      ],
+      "title": "ViolationCode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "kind": {
+      "const": "TestPlan",
+      "title": "Kind",
+      "type": "string"
+    },
+    "metadata": {
+      "$ref": "#/$defs/PlanMetadata"
+    },
+    "target": {
+      "$ref": "#/$defs/Target"
+    },
+    "defaults": {
+      "$ref": "#/$defs/PlanDefaults"
+    },
+    "variables": {
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
+      "title": "Variables",
+      "type": "object"
+    },
+    "scenarios": {
+      "items": {
+        "$ref": "#/$defs/Scenario"
+      },
+      "minItems": 1,
+      "title": "Scenarios",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "kind",
+    "metadata",
+    "target",
+    "scenarios"
+  ],
+  "title": "TestPlan",
+  "type": "object"
+}

@@ -1,0 +1,37 @@
+[project]
+name = "openapi-ai-test-evaluator"
+version = "0.1.0"
+description = "OpenAPI AI test generation and fault evaluation framework"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.13.4",
+    "pyyaml>=6.0.3",
+    "typer>=0.27.1",
+]
+
+[project.scripts]
+oate = "openapi_ai_test_evaluator:main"
+openapi-ai-test-evaluator = "openapi_ai_test_evaluator:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-config --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]
