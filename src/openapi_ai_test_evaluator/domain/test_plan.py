@@ -260,7 +260,9 @@ class MetamorphicRelation(ContractModel):
     collection_pointer: JsonPointer | None = None
     item_key_pointer: JsonPointer | None = None
     mode: PaginationMode | None = None
+    page_size_parameter: str | None = Field(default=None, min_length=1)
     field_pairs: list[RelationFieldPair] = Field(default_factory=list)
+    baseline_step: Identifier | None = None
     stable_follow_up_pointers: list[JsonPointer] = Field(default_factory=list)
     accepted_follow_up_statuses: list[int] = Field(default_factory=list)
 
@@ -271,11 +273,20 @@ class MetamorphicRelation(ContractModel):
         if self.type in {RelationType.QUERY_ORDER, RelationType.PAGINATION}:
             if self.collection_pointer is None or self.item_key_pointer is None:
                 raise ValueError(f"{self.type.value} requires collection and item key pointers")
-        if self.type is RelationType.PAGINATION and self.mode is None:
-            raise ValueError("pagination_monotonicity requires a comparison mode")
+        if self.type is RelationType.PAGINATION:
+            if self.mode is None:
+                raise ValueError("pagination_monotonicity requires a comparison mode")
+            if self.page_size_parameter is None:
+                raise ValueError("pagination_monotonicity requires a page_size_parameter")
         if self.type in {RelationType.CREATE_READ, RelationType.UPDATE_READ}:
             if not self.field_pairs:
                 raise ValueError(f"{self.type.value} requires field_pairs")
+        if (
+            self.type is RelationType.UPDATE_READ
+            and self.stable_follow_up_pointers
+            and self.baseline_step is None
+        ):
+            raise ValueError("update_read_consistency requires baseline_step for stable fields")
         if self.type is RelationType.DELETE_READ and not self.accepted_follow_up_statuses:
             raise ValueError("delete_read_consistency requires accepted follow-up statuses")
         return self
@@ -304,6 +315,8 @@ class Scenario(ContractModel):
             raise ValueError("relation IDs must be unique within a scenario")
         for relation in self.relations:
             referenced_ids = {relation.source_step, relation.follow_up_step}
+            if relation.baseline_step is not None:
+                referenced_ids.add(relation.baseline_step)
             missing = referenced_ids - executable_ids
             if missing:
                 missing_list = ", ".join(sorted(missing))

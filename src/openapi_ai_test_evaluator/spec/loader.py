@@ -1,0 +1,227 @@
+"""Load and normalize the supported OpenAPI 3.0 subset."""
+
+from __future__ import annotations
+
+import copy
+import re
+from pathlib import Path
+from typing import Any
+
+import yaml
+from openapi_spec_validator import validate
+from openapi_spec_validator.validation.exceptions import OpenAPIValidationError
+
+from openapi_ai_test_evaluator.domain.openapi import (
+    OpenAPISpec,
+    OperationModel,
+    ParameterLocation,
+    ParameterModel,
+    RequestBodyModel,
+    ResponseModel,
+)
+
+HTTP_METHODS = ("get", "post", "put", "patch", "delete")
+
+
+class SpecLoadError(ValueError):
+    """An OpenAPI document could not be loaded or normalized."""
+
+
+def resolve_local_ref(document: dict[str, Any], reference: str) -> Any:
+    """Resolve one RFC 6901 local JSON reference."""
+    if not reference.startswith("#/"):
+        raise SpecLoadError(f"external references are not supported in V1: {reference}")
+
+    current: Any = document
+    for encoded_part in reference[2:].split("/"):
+        part = encoded_part.replace("~1", "/").replace("~0", "~")
+        if not isinstance(current, dict) or part not in current:
+            raise SpecLoadError(f"unresolvable local reference: {reference}")
+        current = current[part]
+    return copy.deepcopy(current)
+
+
+def resolve_reference_object(document: dict[str, Any], value: Any) -> Any:
+    """Resolve an OpenAPI Reference Object while rejecting ambiguous siblings."""
+    if not isinstance(value, dict) or "$ref" not in value:
+        return value
+    if set(value) != {"$ref"}:
+        raise SpecLoadError(f"$ref objects cannot contain sibling keys in V1: {value['$ref']}")
+    reference = value["$ref"]
+    if not isinstance(reference, str):
+        raise SpecLoadError("$ref must be a string")
+    return resolve_local_ref(document, reference)
+
+
+def _schema_from_content(content: Any) -> tuple[dict[str, Any] | None, list[str]]:
+    if not isinstance(content, dict):
+        return None, []
+    json_media = content.get("application/json")
+    if isinstance(json_media, dict) and isinstance(json_media.get("schema"), dict):
+        return copy.deepcopy(json_media["schema"]), []
+    if content:
+        return None, ["only application/json content is supported in V1"]
+    return None, []
+
+
+def _normalize_parameter(document: dict[str, Any], raw_parameter: Any) -> ParameterModel:
+    parameter = resolve_reference_object(document, raw_parameter)
+    if not isinstance(parameter, dict):
+        raise SpecLoadError("OpenAPI parameters must be mappings")
+    try:
+        location = ParameterLocation(parameter["in"])
+    except (KeyError, ValueError) as error:
+        raise SpecLoadError(f"unsupported parameter location: {parameter.get('in')}") from error
+    schema = parameter.get("schema", {})
+    if not isinstance(schema, dict):
+        raise SpecLoadError(f"parameter {parameter.get('name')} has an invalid schema")
+    return ParameterModel(
+        name=str(parameter.get("name", "")),
+        location=location,
+        required=bool(parameter.get("required", False)),
+        schema_definition=copy.deepcopy(schema),
+    )
+
+
+def _merge_parameters(
+    document: dict[str, Any],
+    path_parameters: Any,
+    operation_parameters: Any,
+) -> list[ParameterModel]:
+    merged: dict[tuple[ParameterLocation, str], ParameterModel] = {}
+    for collection in (path_parameters or [], operation_parameters or []):
+        if not isinstance(collection, list):
+            raise SpecLoadError("OpenAPI parameters must be a list")
+        for raw_parameter in collection:
+            parameter = _normalize_parameter(document, raw_parameter)
+            name_key = (
+                parameter.name.casefold()
+                if parameter.location is ParameterLocation.HEADER
+                else parameter.name
+            )
+            merged[(parameter.location, name_key)] = parameter
+    return list(merged.values())
+
+
+def _normalize_request_body(
+    document: dict[str, Any], raw_request_body: Any
+) -> tuple[RequestBodyModel | None, list[str]]:
+    if raw_request_body is None:
+        return None, []
+    request_body = resolve_reference_object(document, raw_request_body)
+    if not isinstance(request_body, dict):
+        raise SpecLoadError("requestBody must be a mapping")
+    schema, unsupported = _schema_from_content(request_body.get("content"))
+    return RequestBodyModel(
+        required=bool(request_body.get("required", False)),
+        schema_definition=schema,
+    ), unsupported
+
+
+def _normalize_responses(
+    document: dict[str, Any], raw_responses: Any
+) -> tuple[dict[str, ResponseModel], list[str]]:
+    if not isinstance(raw_responses, dict):
+        raise SpecLoadError("responses must be a mapping")
+    responses: dict[str, ResponseModel] = {}
+    unsupported: list[str] = []
+    for raw_status, raw_response in raw_responses.items():
+        response = resolve_reference_object(document, raw_response)
+        if not isinstance(response, dict):
+            raise SpecLoadError(f"response {raw_status} must be a mapping")
+        schema, response_unsupported = _schema_from_content(response.get("content"))
+        unsupported.extend(response_unsupported)
+        status = str(raw_status)
+        responses[status] = ResponseModel(status_code=status, schema_definition=schema)
+    return responses, unsupported
+
+
+def _generated_operation_id(method: str, path: str) -> str:
+    path_tokens = re.sub(r"\{([^}]+)\}", r"by_\1", path.strip("/"))
+    normalized_path = re.sub(r"[^A-Za-z0-9]+", "_", path_tokens).strip("_")
+    return f"{method}_{normalized_path or 'root'}"
+
+
+def _derived_spec_id(title: str, version: str) -> str:
+    value = f"{title}-{version}".lower()
+    return re.sub(r"[^a-z0-9]+", "-", value).strip("-")
+
+
+def _normalize_document(document: dict[str, Any]) -> OpenAPISpec:
+    openapi_version = str(document.get("openapi", ""))
+    if not openapi_version.startswith("3.0."):
+        raise SpecLoadError(f"V1 supports OpenAPI 3.0.x, received {openapi_version or 'unknown'}")
+
+    info = document.get("info")
+    paths = document.get("paths")
+    if not isinstance(info, dict) or not isinstance(paths, dict):
+        raise SpecLoadError("OpenAPI documents require info and paths mappings")
+    title = str(info.get("title", ""))
+    version = str(info.get("version", ""))
+    spec_id = str(document.get("x-oate-id") or _derived_spec_id(title, version))
+
+    operations: dict[str, OperationModel] = {}
+    for path, raw_path_item in paths.items():
+        path_item = resolve_reference_object(document, raw_path_item)
+        if not isinstance(path_item, dict):
+            raise SpecLoadError(f"path item {path} must be a mapping")
+        for method in HTTP_METHODS:
+            raw_operation = path_item.get(method)
+            if raw_operation is None:
+                continue
+            if not isinstance(raw_operation, dict):
+                raise SpecLoadError(f"operation {method.upper()} {path} must be a mapping")
+            operation_id = str(
+                raw_operation.get("operationId") or _generated_operation_id(method, str(path))
+            )
+            if operation_id in operations:
+                raise SpecLoadError(f"duplicate operationId: {operation_id}")
+
+            parameters = _merge_parameters(
+                document,
+                path_item.get("parameters"),
+                raw_operation.get("parameters"),
+            )
+            request_body, request_unsupported = _normalize_request_body(
+                document, raw_operation.get("requestBody")
+            )
+            responses, response_unsupported = _normalize_responses(
+                document, raw_operation.get("responses")
+            )
+            operations[operation_id] = OperationModel(
+                operation_id=operation_id,
+                method=method.upper(),
+                path=str(path),
+                parameters=parameters,
+                request_body=request_body,
+                responses=responses,
+                unsupported_reasons=[*request_unsupported, *response_unsupported],
+            )
+
+    return OpenAPISpec(
+        spec_id=spec_id,
+        openapi_version=openapi_version,
+        title=title,
+        version=version,
+        operations=operations,
+        document=document,
+    )
+
+
+def load_openapi(path: Path) -> OpenAPISpec:
+    """Load, validate, and normalize an OpenAPI 3.0 document."""
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except OSError as error:
+        raise SpecLoadError(f"cannot read {path}: {error}") from error
+    except yaml.YAMLError as error:
+        raise SpecLoadError(f"invalid YAML in {path}: {error}") from error
+
+    if not isinstance(document, dict):
+        raise SpecLoadError(f"{path} must contain a YAML mapping at the top level")
+    try:
+        validate(document)
+    except OpenAPIValidationError as error:
+        raise SpecLoadError(f"invalid OpenAPI document {path}: {error}") from error
+
+    return _normalize_document(document)

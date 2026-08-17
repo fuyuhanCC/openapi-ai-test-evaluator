@@ -318,12 +318,38 @@
           ],
           "default": null
         },
+        "page_size_parameter": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Size Parameter"
+        },
         "field_pairs": {
           "items": {
             "$ref": "#/$defs/RelationFieldPair"
           },
           "title": "Field Pairs",
           "type": "array"
+        },
+        "baseline_step": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Baseline Step"
         },
         "stable_follow_up_pointers": {
           "items": {

@@ -1,0 +1,256 @@
+openapi: 3.0.3
+
+info:
+  title: Demo Items API
+  version: 1.0.0
+  description: A deterministic fixture API used to test OATE itself.
+
+x-oate-id: demo-items-v1
+
+servers:
+  - url: http://127.0.0.1:8000
+
+paths:
+  /items:
+    get:
+      operationId: listItems
+      summary: List items
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ItemStatus"
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Item collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemList"
+    post:
+      operationId: createItem
+      summary: Create an item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemCreate"
+      responses:
+        "201":
+          description: Item created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /items/{itemId}:
+    parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: getItem
+      summary: Get one item
+      responses:
+        "200":
+          description: Item found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: replaceItem
+      summary: Replace an item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemCreate"
+      responses:
+        "200":
+          description: Item replaced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateItem
+      summary: Partially update an item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemUpdate"
+      responses:
+        "200":
+          description: Item updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteItem
+      summary: Delete an item
+      responses:
+        "204":
+          description: Item deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    ItemStatus:
+      type: string
+      enum: [active, inactive]
+
+    ItemCreate:
+      type: object
+      additionalProperties: false
+      required: [name, price, status]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        price:
+          type: number
+          minimum: 0
+        status:
+          $ref: "#/components/schemas/ItemStatus"
+        category:
+          type: string
+          minLength: 1
+          maxLength: 50
+
+    ItemUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        price:
+          type: number
+          minimum: 0
+        status:
+          $ref: "#/components/schemas/ItemStatus"
+        category:
+          type: string
+          minLength: 1
+          maxLength: 50
+
+    Item:
+      type: object
+      additionalProperties: false
+      required: [id, name, price, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        price:
+          type: number
+          minimum: 0
+        status:
+          $ref: "#/components/schemas/ItemStatus"
+        category:
+          type: string
+          minLength: 1
+          maxLength: 50
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    ItemList:
+      type: object
+      additionalProperties: false
+      required: [items, offset, limit, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Item"
+        offset:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string

@@ -105,6 +105,7 @@ scenarios:
         collection_pointer: /items
         item_key_pointer: /id
         mode: subset
+        page_size_parameter: limit
 
   - id: mr4-create-read
     steps:
@@ -183,6 +184,7 @@ scenarios:
     relations:
       - id: updated-fields-visible
         type: update_read_consistency
+        baseline_step: create-item
         source_step: update
         follow_up_step: read-updated
         field_pairs:
@@ -222,6 +224,9 @@ scenarios:
           path:
             itemId:
               $var: item_id
+        assertions:
+          - operator: status_is
+            expected: 204
       - id: read-deleted
         operation_id: getItem
         request:
@@ -233,7 +238,7 @@ scenarios:
         type: delete_read_consistency
         source_step: delete
         follow_up_step: read-deleted
-        accepted_follow_up_statuses: [404, 410]
+        accepted_follow_up_statuses: [404]
     cleanup:
       - id: cleanup-deleted
         operation_id: deleteItem

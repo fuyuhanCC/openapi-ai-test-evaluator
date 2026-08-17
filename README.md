@@ -4,17 +4,18 @@ An experimental framework for generating declarative API tests from OpenAPI
 documents and evaluating their fault-detection capability with deterministic
 oracles.
 
-> **Current status:** the V1 design and TestPlan structural contract are
-> implemented. OpenAPI semantic validation, HTTP execution, DeepSeek
+> **Current status:** the V1 design, TestPlan contract, OpenAPI 3.0 loader, and
+> plan-to-spec semantic validation are implemented. HTTP execution, DeepSeek
 > integration, PetClinic, and fault injection are planned next.
 
 ## What works today
 
 - Strict Pydantic models for the declarative TestPlan format.
-- YAML loading with explicit validation errors.
+- OpenAPI 3.0 validation, local-reference resolution, and operation normalization.
+- Structural TestPlan validation plus plan-to-OpenAPI semantic validation.
 - Positive, negative, stateful, and metamorphic TestPlan examples.
 - Generated JSON Schema for external tools and structured model output.
-- A CLI for validating plans and exporting the schema.
+- A CLI for validating plans independently or against an OpenAPI document.
 - Unit tests for valid and invalid contract behavior.
 
 ## Requirements
@@ -30,8 +31,19 @@ uv sync
 
 ## Validate a TestPlan
 
+Check only the generator-independent TestPlan structure:
+
 ```bash
 uv run oate plan validate --plan examples/plans/metamorphic.yaml
+```
+
+Also check operation IDs, parameters, request schemas, response contracts, and
+metamorphic references against an OpenAPI document:
+
+```bash
+uv run oate plan validate \
+  --spec examples/demo-items/openapi.yaml \
+  --plan examples/plans/all-methods.yaml
 ```
 
 Export the generated JSON Schema:
