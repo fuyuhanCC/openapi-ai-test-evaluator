@@ -37,7 +37,7 @@ def validate_plan(
             file_okay=True,
             dir_okay=False,
             readable=True,
-            help="Also validate the plan against an OpenAPI 3.0 document.",
+            help="Also validate the plan against a supported OpenAPI 3.0/3.1 document.",
         ),
     ] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Emit JSON output.")] = False,

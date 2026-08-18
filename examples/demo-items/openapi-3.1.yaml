@@ -1,4 +1,5 @@
-openapi: 3.0.3
+openapi: 3.1.0
+jsonSchemaDialect: https://spec.openapis.org/oas/3.1/dialect/base
 
 info:
   title: Demo Items API
@@ -172,8 +173,7 @@ components:
         status:
           $ref: "#/components/schemas/ItemStatus"
         category:
-          type: string
-          nullable: true
+          type: [string, "null"]
           minLength: 1
           maxLength: 50
 
@@ -192,8 +192,7 @@ components:
         status:
           $ref: "#/components/schemas/ItemStatus"
         category:
-          type: string
-          nullable: true
+          type: [string, "null"]
           minLength: 1
           maxLength: 50
 
@@ -216,8 +215,7 @@ components:
         status:
           $ref: "#/components/schemas/ItemStatus"
         category:
-          type: string
-          nullable: true
+          type: [string, "null"]
           minLength: 1
           maxLength: 50
         createdAt:

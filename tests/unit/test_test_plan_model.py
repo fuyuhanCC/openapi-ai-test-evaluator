@@ -60,3 +60,4 @@ def test_schema_contains_top_level_contract() -> None:
         "target",
         "scenarios",
     }
+    assert "schema_mismatch" in schema["$defs"]["ViolationCode"]["enum"]

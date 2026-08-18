@@ -9,6 +9,9 @@ from pydantic import Field
 
 from openapi_ai_test_evaluator.domain.test_plan import ContractModel
 
+SchemaDefinition = dict[str, Any] | bool
+SUPPORTED_STRING_FORMATS = frozenset({"date", "date-time", "uuid", "email", "uri", "ipv4", "ipv6"})
+
 
 class ParameterLocation(StrEnum):
     PATH = "path"
@@ -20,17 +23,17 @@ class ParameterModel(ContractModel):
     name: str
     location: ParameterLocation
     required: bool = False
-    schema_definition: dict[str, Any] = Field(default_factory=dict)
+    schema_definition: SchemaDefinition = Field(default_factory=dict)
 
 
 class RequestBodyModel(ContractModel):
     required: bool = False
-    schema_definition: dict[str, Any] | None = None
+    schema_definition: SchemaDefinition | None = None
 
 
 class ResponseModel(ContractModel):
     status_code: str
-    schema_definition: dict[str, Any] | None = None
+    schema_definition: SchemaDefinition | None = None
 
 
 class OperationModel(ContractModel):

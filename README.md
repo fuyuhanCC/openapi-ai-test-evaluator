@@ -4,14 +4,16 @@ An experimental framework for generating declarative API tests from OpenAPI
 documents and evaluating their fault-detection capability with deterministic
 oracles.
 
-> **Current status:** the V1 design, TestPlan contract, OpenAPI 3.0 loader, and
-> plan-to-spec semantic validation are implemented. HTTP execution, DeepSeek
-> integration, PetClinic, and fault injection are planned next.
+> **Current status:** the V1 design, TestPlan contract, OpenAPI 3.0/3.1
+> common-subset loader, and plan-to-spec semantic validation are implemented.
+> HTTP execution, DeepSeek integration, PetClinic, and fault injection are
+> planned next.
 
 ## What works today
 
 - Strict Pydantic models for the declarative TestPlan format.
-- OpenAPI 3.0 validation, local-reference resolution, and operation normalization.
+- OpenAPI 3.0.x/3.1.x common-subset validation, local-reference resolution, and
+  operation normalization.
 - Structural TestPlan validation plus plan-to-OpenAPI semantic validation.
 - Positive, negative, stateful, and metamorphic TestPlan examples.
 - Generated JSON Schema for external tools and structured model output.
@@ -43,6 +45,15 @@ metamorphic references against an OpenAPI document:
 ```bash
 uv run oate plan validate \
   --spec examples/demo-items/openapi.yaml \
+  --plan examples/plans/all-methods.yaml
+```
+
+The equivalent OpenAPI 3.1 fixture uses the same TestPlan contract and operation
+IDs:
+
+```bash
+uv run oate plan validate \
+  --spec examples/demo-items/openapi-3.1.yaml \
   --plan examples/plans/all-methods.yaml
 ```
 

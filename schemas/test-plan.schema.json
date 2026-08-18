@@ -727,6 +727,7 @@
       "enum": [
         "missing_required",
         "type_mismatch",
+        "schema_mismatch",
         "invalid_enum",
         "out_of_range",
         "invalid_format",

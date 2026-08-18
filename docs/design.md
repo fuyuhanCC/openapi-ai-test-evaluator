@@ -6,7 +6,7 @@
 | --- | --- |
 | Status | Accepted for V1 implementation |
 | Version | 1.0 |
-| Last updated | 2026-08-16 |
+| Last updated | 2026-08-18 |
 | Primary benchmark | Spring PetClinic REST |
 | LLM provider | DeepSeek, behind a provider interface |
 
@@ -46,8 +46,8 @@ It is intended to answer three questions:
 
 V1 will:
 
-1. Parse a supported subset of OpenAPI 3.0 documents into a normalized internal
-   model.
+1. Parse a supported subset of OpenAPI 3.0.x and 3.1.x documents into a
+   normalized internal model.
 2. Define a generator-independent, declarative `TestPlan` contract.
 3. Provide a deterministic rule-based generator as the baseline.
 4. Integrate DeepSeek through a replaceable provider interface.
@@ -82,29 +82,45 @@ reproducible experimental result.
 
 ## 5. Supported OpenAPI Scope
 
-V1 targets the common JSON REST subset of OpenAPI 3.0.x.
+V1 targets the common JSON REST subset shared by OpenAPI 3.0.x and 3.1.x. It
+does not claim exhaustive OpenAPI or JSON Schema support.
 
 ### 5.1 Supported
 
 - YAML and JSON documents.
+- OpenAPI 3.0.x and 3.1.x documents.
 - `GET`, `POST`, `PUT`, `PATCH`, and `DELETE` operations.
 - Path, query, and header parameters.
 - `application/json` request and response bodies.
-- Local `$ref` references.
+- Local `$ref` references, including adjacent Schema constraints in 3.1.
+- OpenAPI 3.0 `nullable` and OpenAPI 3.1 type arrays containing `null`.
+- Boolean Schemas and `allOf`, `oneOf`, and `anyOf` composition.
+- Common object, array, string, and numeric constraints, including
+  schema-valued `additionalProperties`, `uniqueItems`, and `multipleOf`.
+- `date`, `date-time`, `uuid`, `email`, `uri`, `ipv4`, and `ipv6` formats.
+- The OAS 3.1 dialect and standard JSON Schema 2020-12 dialect, at document and
+  Schema-resource scope.
 - API key and bearer-token values supplied at runtime.
 - Generated stable operation identifiers when `operationId` is absent.
 
 ### 5.2 Explicitly unsupported in V1
 
 - External `$ref` references.
+- Custom JSON Schema dialects.
+- Conditional and annotation-dependent validation such as `if` / `then` /
+  `else`, `dependentSchemas`, and `unevaluatedProperties`.
+- Dynamic references, tuple schemas, `contains`, `patternProperties`, and other
+  JSON Schema 2020-12 features outside the documented common subset.
+- String formats outside the supported format allowlist.
 - `multipart/form-data` and file upload.
 - XML schemas and payloads.
 - Callbacks and webhooks.
 - Automated OAuth token acquisition.
-- OpenAPI 3.1-only JSON Schema behavior.
 
-Unsupported features must produce structured skip reasons. They must not be
-silently ignored or counted as covered.
+Unsupported operation-level features must produce structured skip reasons.
+Unsupported document-wide dialects or invalid specifications produce explicit
+load errors. Unsupported behavior must not be silently ignored or counted as
+covered.
 
 ## 6. Design Principles
 
@@ -693,7 +709,7 @@ V1 is complete when:
 
 Candidate V1.1 capabilities include:
 
-- OpenAPI 3.1 support.
+- Broader OpenAPI 3.1 and JSON Schema 2020-12 keyword coverage.
 - MCP adapter and evaluation skill.
 - A coverage-guided bounded tool-calling agent.
 - Multiple LLM providers and model regression comparisons.

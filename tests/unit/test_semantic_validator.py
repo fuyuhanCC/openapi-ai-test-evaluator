@@ -10,18 +10,26 @@ from openapi_ai_test_evaluator.validation import load_test_plan, validate_plan_s
 
 ROOT = Path(__file__).parents[2]
 PLAN_DIR = ROOT / "examples" / "plans"
-SPEC = load_openapi(ROOT / "examples" / "demo-items" / "openapi.yaml")
+SPEC_PATH_30 = ROOT / "examples" / "demo-items" / "openapi.yaml"
+SPEC_PATH_31 = ROOT / "examples" / "demo-items" / "openapi-3.1.yaml"
+DEMO_SPEC_PATHS = [
+    pytest.param(SPEC_PATH_30, id="openapi-3.0"),
+    pytest.param(SPEC_PATH_31, id="openapi-3.1"),
+]
+SPEC = load_openapi(SPEC_PATH_30)
 
 
+@pytest.mark.parametrize("spec_path", DEMO_SPEC_PATHS)
 @pytest.mark.parametrize(
     "plan_path",
     sorted(PLAN_DIR.glob("*.yaml")),
     ids=lambda path: path.stem,
 )
-def test_reviewed_plans_match_demo_openapi(plan_path: Path) -> None:
+def test_reviewed_plans_match_demo_openapi(plan_path: Path, spec_path: Path) -> None:
     plan = load_test_plan(plan_path)
+    spec = load_openapi(spec_path)
 
-    assert validate_plan_semantics(plan, SPEC) == []
+    assert validate_plan_semantics(plan, spec) == []
 
 
 def _minimal_plan_data() -> dict[str, object]:
@@ -265,6 +273,21 @@ def test_update_read_requires_same_resource_and_compatible_fields() -> None:
 
     assert "relation_resource_not_linked" in codes
     assert "relation_field_type_mismatch" in codes
+
+
+def test_relation_type_compatibility_supports_openapi_31_type_arrays() -> None:
+    plan_data = deepcopy(load_test_plan(PLAN_DIR / "metamorphic.yaml").model_dump(mode="json"))
+    scenario = _scenario_with_relation(plan_data, "create_read_consistency")
+    pair = _relation(scenario)["field_pairs"][0]
+    pair["source"]["pointer"] = "/category"
+    pair["follow_up"]["pointer"] = "/name"
+
+    issues = validate_plan_semantics(
+        PlanModel.model_validate(plan_data),
+        load_openapi(SPEC_PATH_31),
+    )
+
+    assert "relation_field_type_mismatch" not in {issue.code for issue in issues}
 
 
 def test_delete_read_requires_delete_method_and_success_assertion() -> None:

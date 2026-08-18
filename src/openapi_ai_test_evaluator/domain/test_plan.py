@@ -39,6 +39,7 @@ class RequestMode(StrEnum):
 class ViolationCode(StrEnum):
     MISSING_REQUIRED = "missing_required"
     TYPE_MISMATCH = "type_mismatch"
+    SCHEMA_MISMATCH = "schema_mismatch"
     INVALID_ENUM = "invalid_enum"
     OUT_OF_RANGE = "out_of_range"
     INVALID_FORMAT = "invalid_format"

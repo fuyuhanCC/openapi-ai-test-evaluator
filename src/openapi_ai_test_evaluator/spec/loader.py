@@ -1,4 +1,4 @@
-"""Load and normalize the supported OpenAPI 3.0 subset."""
+"""Load and normalize the supported OpenAPI 3.0/3.1 subset."""
 
 from __future__ import annotations
 
@@ -12,15 +12,46 @@ from openapi_spec_validator import validate
 from openapi_spec_validator.validation.exceptions import OpenAPIValidationError
 
 from openapi_ai_test_evaluator.domain.openapi import (
+    SUPPORTED_STRING_FORMATS,
     OpenAPISpec,
     OperationModel,
     ParameterLocation,
     ParameterModel,
     RequestBodyModel,
     ResponseModel,
+    SchemaDefinition,
 )
 
 HTTP_METHODS = ("get", "post", "put", "patch", "delete")
+SUPPORTED_OPENAPI_31_DIALECTS = frozenset(
+    {
+        "https://spec.openapis.org/oas/3.1/dialect/base",
+        "https://json-schema.org/draft/2020-12/schema",
+    }
+)
+UNSUPPORTED_SCHEMA_KEYWORDS = frozenset(
+    {
+        "$dynamicAnchor",
+        "$dynamicRef",
+        "$recursiveAnchor",
+        "$recursiveRef",
+        "additionalItems",
+        "contains",
+        "dependentRequired",
+        "dependentSchemas",
+        "else",
+        "if",
+        "maxContains",
+        "minContains",
+        "not",
+        "patternProperties",
+        "prefixItems",
+        "propertyNames",
+        "then",
+        "unevaluatedItems",
+        "unevaluatedProperties",
+    }
+)
 
 
 class SpecLoadError(ValueError):
@@ -42,22 +73,112 @@ def resolve_local_ref(document: dict[str, Any], reference: str) -> Any:
 
 
 def resolve_reference_object(document: dict[str, Any], value: Any) -> Any:
-    """Resolve an OpenAPI Reference Object while rejecting ambiguous siblings."""
+    """Resolve a Reference Object, accepting only the annotations allowed in 3.1."""
     if not isinstance(value, dict) or "$ref" not in value:
         return value
-    if set(value) != {"$ref"}:
-        raise SpecLoadError(f"$ref objects cannot contain sibling keys in V1: {value['$ref']}")
     reference = value["$ref"]
     if not isinstance(reference, str):
         raise SpecLoadError("$ref must be a string")
+    allowed_keys = {"$ref"}
+    if str(document.get("openapi", "")).startswith("3.1."):
+        allowed_keys.update({"summary", "description"})
+    if unsupported_keys := set(value) - allowed_keys:
+        keys = ", ".join(sorted(unsupported_keys))
+        raise SpecLoadError(f"$ref objects cannot contain sibling keys in V1 ({keys}): {reference}")
     return resolve_local_ref(document, reference)
 
 
-def _schema_from_content(content: Any) -> tuple[dict[str, Any] | None, list[str]]:
+def _unsupported_schema_reasons(
+    schema: SchemaDefinition,
+    document: dict[str, Any],
+    location: str,
+    reference_stack: tuple[str, ...] = (),
+) -> list[str]:
+    if isinstance(schema, bool):
+        return []
+
+    reasons = [
+        f"unsupported schema keyword {keyword!r} at {location}.{keyword}"
+        for keyword in sorted(UNSUPPORTED_SCHEMA_KEYWORDS & schema.keys())
+    ]
+    format_name = schema.get("format")
+    if isinstance(format_name, str) and format_name not in SUPPORTED_STRING_FORMATS:
+        reasons.append(f"unsupported string format {format_name!r} at {location}.format")
+
+    reference = schema.get("$ref")
+    if isinstance(reference, str) and reference not in reference_stack:
+        if reference.startswith("#/"):
+            resolved = resolve_local_ref(document, reference)
+            if isinstance(resolved, (dict, bool)):
+                reasons.extend(
+                    _unsupported_schema_reasons(
+                        resolved,
+                        document,
+                        f"{location}.$ref({reference})",
+                        (*reference_stack, reference),
+                    )
+                )
+        else:
+            reasons.append(f"external schema reference is unsupported at {location}.$ref")
+
+    for keyword in (
+        "items",
+        "additionalProperties",
+        "not",
+        "if",
+        "then",
+        "else",
+        "contains",
+        "propertyNames",
+        "unevaluatedProperties",
+        "unevaluatedItems",
+    ):
+        child = schema.get(keyword)
+        if isinstance(child, (dict, bool)):
+            reasons.extend(
+                _unsupported_schema_reasons(
+                    child, document, f"{location}.{keyword}", reference_stack
+                )
+            )
+
+    for keyword in ("properties", "patternProperties", "dependentSchemas", "$defs", "definitions"):
+        children = schema.get(keyword)
+        if not isinstance(children, dict):
+            continue
+        for name, child in children.items():
+            if isinstance(child, (dict, bool)):
+                reasons.extend(
+                    _unsupported_schema_reasons(
+                        child,
+                        document,
+                        f"{location}.{keyword}[{name!r}]",
+                        reference_stack,
+                    )
+                )
+
+    for keyword in ("allOf", "anyOf", "oneOf", "prefixItems"):
+        children = schema.get(keyword)
+        if not isinstance(children, list):
+            continue
+        for index, child in enumerate(children):
+            if isinstance(child, (dict, bool)):
+                reasons.extend(
+                    _unsupported_schema_reasons(
+                        child,
+                        document,
+                        f"{location}.{keyword}[{index}]",
+                        reference_stack,
+                    )
+                )
+
+    return reasons
+
+
+def _schema_from_content(content: Any) -> tuple[SchemaDefinition | None, list[str]]:
     if not isinstance(content, dict):
         return None, []
     json_media = content.get("application/json")
-    if isinstance(json_media, dict) and isinstance(json_media.get("schema"), dict):
+    if isinstance(json_media, dict) and isinstance(json_media.get("schema"), (dict, bool)):
         return copy.deepcopy(json_media["schema"]), []
     if content:
         return None, ["only application/json content is supported in V1"]
@@ -73,7 +194,7 @@ def _normalize_parameter(document: dict[str, Any], raw_parameter: Any) -> Parame
     except (KeyError, ValueError) as error:
         raise SpecLoadError(f"unsupported parameter location: {parameter.get('in')}") from error
     schema = parameter.get("schema", {})
-    if not isinstance(schema, dict):
+    if not isinstance(schema, (dict, bool)):
         raise SpecLoadError(f"parameter {parameter.get('name')} has an invalid schema")
     return ParameterModel(
         name=str(parameter.get("name", "")),
@@ -149,8 +270,17 @@ def _derived_spec_id(title: str, version: str) -> str:
 
 def _normalize_document(document: dict[str, Any]) -> OpenAPISpec:
     openapi_version = str(document.get("openapi", ""))
-    if not openapi_version.startswith("3.0."):
-        raise SpecLoadError(f"V1 supports OpenAPI 3.0.x, received {openapi_version or 'unknown'}")
+    if not openapi_version.startswith(("3.0.", "3.1.")):
+        raise SpecLoadError(
+            f"V1 supports OpenAPI 3.0.x and 3.1.x, received {openapi_version or 'unknown'}"
+        )
+    schema_dialect = document.get("jsonSchemaDialect")
+    if (
+        openapi_version.startswith("3.1.")
+        and schema_dialect is not None
+        and schema_dialect not in SUPPORTED_OPENAPI_31_DIALECTS
+    ):
+        raise SpecLoadError(f"unsupported jsonSchemaDialect: {schema_dialect}")
 
     info = document.get("info")
     paths = document.get("paths")
@@ -188,6 +318,35 @@ def _normalize_document(document: dict[str, Any]) -> OpenAPISpec:
             responses, response_unsupported = _normalize_responses(
                 document, raw_operation.get("responses")
             )
+            schema_unsupported: list[str] = []
+            for parameter in parameters:
+                schema_unsupported.extend(
+                    _unsupported_schema_reasons(
+                        parameter.schema_definition,
+                        document,
+                        f"parameter {parameter.location.value}.{parameter.name} schema",
+                    )
+                )
+            if request_body is not None and request_body.schema_definition is not None:
+                schema_unsupported.extend(
+                    _unsupported_schema_reasons(
+                        request_body.schema_definition,
+                        document,
+                        "request body schema",
+                    )
+                )
+            for status, response in responses.items():
+                if response.schema_definition is not None:
+                    schema_unsupported.extend(
+                        _unsupported_schema_reasons(
+                            response.schema_definition,
+                            document,
+                            f"response {status} schema",
+                        )
+                    )
+            unsupported_reasons = list(
+                dict.fromkeys([*request_unsupported, *response_unsupported, *schema_unsupported])
+            )
             operations[operation_id] = OperationModel(
                 operation_id=operation_id,
                 method=method.upper(),
@@ -195,7 +354,7 @@ def _normalize_document(document: dict[str, Any]) -> OpenAPISpec:
                 parameters=parameters,
                 request_body=request_body,
                 responses=responses,
-                unsupported_reasons=[*request_unsupported, *response_unsupported],
+                unsupported_reasons=unsupported_reasons,
             )
 
     return OpenAPISpec(
@@ -209,7 +368,7 @@ def _normalize_document(document: dict[str, Any]) -> OpenAPISpec:
 
 
 def load_openapi(path: Path) -> OpenAPISpec:
-    """Load, validate, and normalize an OpenAPI 3.0 document."""
+    """Load, validate, and normalize a supported OpenAPI document."""
     try:
         document = yaml.safe_load(path.read_text(encoding="utf-8"))
     except OSError as error:

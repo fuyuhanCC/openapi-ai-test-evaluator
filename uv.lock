@@ -246,6 +246,7 @@ name = "openapi-ai-test-evaluator"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "jsonschema" },
     { name = "openapi-spec-validator" },
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -261,6 +262,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "openapi-spec-validator", specifier = ">=0.9.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pyyaml", specifier = ">=6.0.3" },

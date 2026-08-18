@@ -5,6 +5,7 @@ description = "OpenAPI AI test generation and fault evaluation framework"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "jsonschema>=4.26.0",
     "openapi-spec-validator>=0.9.0",
     "pydantic>=2.13.4",
     "pyyaml>=6.0.3",

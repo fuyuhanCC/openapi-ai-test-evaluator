@@ -11,6 +11,7 @@ from openapi_ai_test_evaluator.domain.openapi import (
     OpenAPISpec,
     OperationModel,
     ParameterLocation,
+    SchemaDefinition,
 )
 from openapi_ai_test_evaluator.domain.test_plan import (
     AssertionOperator,
@@ -263,7 +264,7 @@ def _expected_statuses(step: RequestStep) -> list[int]:
 
 def _candidate_response_schemas(
     step: RequestStep, operation: OperationModel
-) -> list[dict[str, Any]]:
+) -> list[SchemaDefinition]:
     statuses = _expected_statuses(step)
     if not statuses:
         statuses = [
@@ -271,7 +272,7 @@ def _candidate_response_schemas(
             for status in operation.responses
             if status.isdigit() and 200 <= int(status) < 300
         ]
-    schemas: list[dict[str, Any]] = []
+    schemas: list[SchemaDefinition] = []
     for status in statuses:
         response = _response_for_status(operation, status)
         if response is not None and response.schema_definition is not None:
@@ -280,7 +281,7 @@ def _candidate_response_schemas(
 
 
 def _pointer_exists_in_any_schema(
-    schemas: list[dict[str, Any]], pointer: str, spec: OpenAPISpec
+    schemas: list[SchemaDefinition], pointer: str, spec: OpenAPISpec
 ) -> bool:
     return any(schema_at_pointer(schema, pointer, spec.document) is not None for schema in schemas)
 
@@ -393,7 +394,7 @@ def _schema_for_relation_location(
     step: RequestStep,
     operation: OperationModel,
     location: str,
-) -> list[dict[str, Any]]:
+) -> list[SchemaDefinition]:
     if location == "request.body":
         if operation.request_body is None or operation.request_body.schema_definition is None:
             return []
@@ -439,9 +440,9 @@ def _paths_share_resource(source: RequestStep, follow_up: RequestStep) -> bool:
 
 
 def _schemas_at_pointer(
-    schemas: list[dict[str, Any]], pointer: str, spec: OpenAPISpec
-) -> list[dict[str, Any]]:
-    found: list[dict[str, Any]] = []
+    schemas: list[SchemaDefinition], pointer: str, spec: OpenAPISpec
+) -> list[SchemaDefinition]:
+    found: list[SchemaDefinition] = []
     for schema in schemas:
         pointed_schema = schema_at_pointer(schema, pointer, spec.document)
         if pointed_schema is not None:
@@ -450,17 +451,35 @@ def _schemas_at_pointer(
 
 
 def _schema_types_compatible(
-    source_schemas: list[dict[str, Any]], follow_schemas: list[dict[str, Any]]
+    source_schemas: list[SchemaDefinition], follow_schemas: list[SchemaDefinition]
 ) -> bool:
     for source_schema in source_schemas:
         for follow_schema in follow_schemas:
-            source_type = source_schema.get("type")
-            follow_type = follow_schema.get("type")
-            if source_type is None or follow_type is None or source_type == follow_type:
+            if isinstance(source_schema, bool) or isinstance(follow_schema, bool):
                 return True
-            if {source_type, follow_type} == {"integer", "number"}:
+            source_types = _schema_type_names(source_schema)
+            follow_types = _schema_type_names(follow_schema)
+            if source_types is None or follow_types is None:
+                return True
+            if source_types & follow_types:
+                return True
+            if (
+                "integer" in source_types
+                and "number" in follow_types
+                or "number" in source_types
+                and "integer" in follow_types
+            ):
                 return True
     return False
+
+
+def _schema_type_names(schema: dict[str, Any]) -> set[str] | None:
+    schema_type = schema.get("type")
+    if isinstance(schema_type, str):
+        return {schema_type}
+    if isinstance(schema_type, list):
+        return {item for item in schema_type if isinstance(item, str)}
+    return None
 
 
 def _validate_relation(
