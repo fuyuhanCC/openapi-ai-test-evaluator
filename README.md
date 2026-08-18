@@ -14,6 +14,8 @@ oracles.
 - Strict Pydantic models for the declarative TestPlan format.
 - OpenAPI 3.0.x/3.1.x common-subset validation, local-reference resolution, and
   operation normalization.
+- Mature OpenAPI validators for document conformance and static Schema value
+  checking, with project-specific error mapping for TestPlan semantics.
 - Structural TestPlan validation plus plan-to-OpenAPI semantic validation.
 - Positive, negative, stateful, and metamorphic TestPlan examples.
 - Generated JSON Schema for external tools and structured model output.

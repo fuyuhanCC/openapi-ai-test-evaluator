@@ -70,6 +70,34 @@ def test_reports_type_missing_required_and_array_item_violations() -> None:
     assert type_issues[0].code is ViolationCode.TYPE_MISMATCH
 
 
+def test_reports_each_missing_and_additional_field_at_its_pointer() -> None:
+    schema = {
+        "type": "object",
+        "required": ["name", "count"],
+        "additionalProperties": False,
+        "properties": {
+            "name": {"type": "string"},
+            "count": {"type": "integer"},
+        },
+    }
+
+    missing = validate_schema_value({}, schema, SPEC.document)
+    additional = validate_schema_value(
+        {"name": "item", "count": 1, "extraA": True, "extraB": False},
+        schema,
+        SPEC.document,
+    )
+
+    assert {(issue.code, issue.pointer) for issue in missing} == {
+        (ViolationCode.MISSING_REQUIRED, "/name"),
+        (ViolationCode.MISSING_REQUIRED, "/count"),
+    }
+    assert {(issue.code, issue.pointer) for issue in additional} == {
+        (ViolationCode.ADDITIONAL_PROPERTY, "/extraA"),
+        (ViolationCode.ADDITIONAL_PROPERTY, "/extraB"),
+    }
+
+
 def test_enforces_array_length_and_unique_items() -> None:
     schema = {
         "type": "array",
@@ -125,34 +153,59 @@ def test_accepts_nullable_and_runtime_variables() -> None:
     assert validate_schema_value(None, {**schema, "nullable": True}, SPEC.document) == []
 
 
+def test_runtime_variable_does_not_hide_unrelated_schema_violation() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "runtime": {"type": "integer"},
+            "name": {"type": "string", "minLength": 3},
+        },
+    }
+
+    violations = validate_schema_value(
+        {"runtime": {"$var": "runtime_value"}, "name": "x"},
+        schema,
+        SPEC.document,
+    )
+
+    assert [(issue.code, issue.pointer) for issue in violations] == [
+        (ViolationCode.OUT_OF_RANGE, "/name")
+    ]
+
+
 def test_supports_openapi_31_type_arrays_and_null() -> None:
+    document = {"openapi": "3.1.0"}
     schema = {"type": ["string", "null"]}
 
-    assert validate_schema_value("hello", schema, SPEC.document) == []
-    assert validate_schema_value(None, schema, SPEC.document) == []
+    assert validate_schema_value("hello", schema, document) == []
+    assert validate_schema_value(None, schema, document) == []
 
-    violations = validate_schema_value(123, schema, SPEC.document)
+    violations = validate_schema_value(123, schema, document)
     assert [violation.code for violation in violations] == [ViolationCode.TYPE_MISMATCH]
 
 
 def test_boolean_schemas_apply_at_top_level_and_nested_values() -> None:
-    assert validate_schema_value("anything", True, SPEC.document) == []
+    document = {
+        "openapi": "3.1.0",
+        "components": {"schemas": {"Never": False}},
+    }
+    assert validate_schema_value("anything", True, document) == []
 
-    rejected = validate_schema_value("anything", False, SPEC.document)
+    rejected = validate_schema_value("anything", False, document)
     rejected_variable = validate_schema_value(
         {"$var": "runtime_value"},
         False,
-        SPEC.document,
+        document,
     )
     rejected_item = validate_schema_value(
         [1],
         {"type": "array", "items": False},
-        SPEC.document,
+        document,
     )
     rejected_property = validate_schema_value(
         {"forbidden": 1},
         {"type": "object", "properties": {"forbidden": False}},
-        SPEC.document,
+        document,
     )
 
     assert [issue.code for issue in rejected] == [ViolationCode.SCHEMA_MISMATCH]
@@ -163,7 +216,7 @@ def test_boolean_schemas_apply_at_top_level_and_nested_values() -> None:
         validate_schema_value(
             "value",
             {"allOf": [True, {"type": "string"}]},
-            SPEC.document,
+            document,
         )
         == []
     )
@@ -171,21 +224,58 @@ def test_boolean_schemas_apply_at_top_level_and_nested_values() -> None:
         validate_schema_value(
             "value",
             {"oneOf": [False, {"type": "string"}]},
-            SPEC.document,
+            document,
         )
         == []
     )
 
-    document = {
-        "openapi": "3.1.0",
-        "components": {"schemas": {"Never": False}},
-    }
     rejected_reference = validate_schema_value(
         "value",
         {"$ref": "#/components/schemas/Never"},
         document,
     )
     assert [issue.code for issue in rejected_reference] == [ViolationCode.SCHEMA_MISMATCH]
+
+
+def test_openapi_31_boolean_keyword_values_remain_values() -> None:
+    document = {"openapi": "3.1.0"}
+    schema = {
+        "type": "array",
+        "uniqueItems": True,
+        "items": {"type": "boolean", "enum": [True]},
+    }
+
+    assert validate_schema_value([True], schema, document) == []
+    duplicate_issues = validate_schema_value([True, True], schema, document)
+    enum_issues = validate_schema_value([False], schema, document)
+
+    assert [issue.code for issue in duplicate_issues] == [ViolationCode.SCHEMA_MISMATCH]
+    assert [issue.code for issue in enum_issues] == [ViolationCode.INVALID_ENUM]
+
+
+def test_openapi_31_nested_boolean_schema_keeps_pointer_through_ref() -> None:
+    document = {
+        "openapi": "3.1.0",
+        "components": {
+            "schemas": {
+                "Restricted": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {"forbidden": False},
+                }
+            }
+        },
+    }
+    violations = validate_schema_value(
+        {"forbidden": 1, "extra": 2},
+        {"$ref": "#/components/schemas/Restricted"},
+        document,
+    )
+
+    assert {(issue.code, issue.pointer) for issue in violations} == {
+        (ViolationCode.SCHEMA_MISMATCH, "/forbidden"),
+        (ViolationCode.ADDITIONAL_PROPERTY, "/extra"),
+    }
 
 
 def test_boolean_schema_pointer_semantics() -> None:
@@ -224,8 +314,9 @@ def test_enforces_openapi_31_const_and_numeric_exclusive_bounds() -> None:
 
 
 def test_const_and_enum_use_json_value_equality() -> None:
-    const_issues = validate_schema_value(True, {"const": 1}, SPEC.document)
-    enum_issues = validate_schema_value(True, {"enum": [1]}, SPEC.document)
+    document = {"openapi": "3.1.0"}
+    const_issues = validate_schema_value(True, {"const": 1}, document)
+    enum_issues = validate_schema_value(True, {"enum": [1]}, document)
 
     assert [issue.code for issue in const_issues] == [ViolationCode.INVALID_ENUM]
     assert [issue.code for issue in enum_issues] == [ViolationCode.INVALID_ENUM]
@@ -238,6 +329,20 @@ def test_enforces_multiple_of_without_float_rounding_errors() -> None:
 
     violations = validate_schema_value(0.31, schema, SPEC.document)
     assert [issue.code for issue in violations] == [ViolationCode.OUT_OF_RANGE]
+
+
+def test_enforces_multiple_of_without_float_rounding_errors_through_ref() -> None:
+    document = {
+        "openapi": "3.0.3",
+        "components": {
+            "schemas": {
+                "Tenth": {"type": "number", "multipleOf": 0.1},
+            }
+        },
+    }
+    schema = {"$ref": "#/components/schemas/Tenth"}
+
+    assert validate_schema_value(0.3, schema, document) == []
 
 
 @pytest.mark.parametrize(

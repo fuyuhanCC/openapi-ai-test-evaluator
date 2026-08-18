@@ -1,23 +1,25 @@
-"""Validation helpers for the supported OpenAPI 3.0/3.1 Schema Object subset."""
+"""OpenAPI Schema validation adapters and TestPlan-specific schema helpers."""
 
 from __future__ import annotations
 
+import copy
 import re
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 from urllib.parse import urlsplit
 
 from jsonschema import FormatChecker
+from jsonschema.exceptions import ValidationError
+from openapi_schema_validator import OAS30Validator, OAS31Validator
+from referencing import Registry, Resource
+from referencing.jsonschema import DRAFT4, DRAFT202012
 
-from openapi_ai_test_evaluator.domain.openapi import (
-    SUPPORTED_STRING_FORMATS,
-    SchemaDefinition,
-)
+from openapi_ai_test_evaluator.domain.openapi import SchemaDefinition
 from openapi_ai_test_evaluator.domain.test_plan import ViolationCode
 from openapi_ai_test_evaluator.spec.loader import resolve_local_ref
 
-FORMAT_CHECKER = FormatChecker()
+_DOCUMENT_URI = "urn:oate:openapi-document"
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,7 @@ def _resolve_schema(
     document: dict[str, Any],
     reference_stack: tuple[str, ...],
 ) -> tuple[SchemaDefinition, tuple[str, ...]]:
+    """Resolve one schema reference for TestPlan pointer navigation."""
     if isinstance(schema, bool):
         return schema, reference_stack
     reference = schema.get("$ref")
@@ -84,71 +87,12 @@ def _resolve_schema(
     return resolved, resolved_stack
 
 
-def _matches_json_type(value: Any, expected_type: Any) -> bool:
-    if isinstance(expected_type, list):
-        return any(_matches_json_type(value, candidate) for candidate in expected_type)
-    if expected_type == "object":
-        return isinstance(value, dict)
-    if expected_type == "array":
-        return isinstance(value, list)
-    if expected_type == "string":
-        return isinstance(value, str)
-    if expected_type == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
-    if expected_type == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
-    if expected_type == "boolean":
-        return isinstance(value, bool)
-    if expected_type == "null":
-        return value is None
-    return True
-
-
 def _declares_json_type(expected_type: Any, type_name: str) -> bool:
     if isinstance(expected_type, str):
         return expected_type == type_name
     if isinstance(expected_type, list):
         return type_name in expected_type
     return False
-
-
-def _json_values_equal(left: Any, right: Any) -> bool:
-    if isinstance(left, bool) or isinstance(right, bool):
-        return isinstance(left, bool) and isinstance(right, bool) and left == right
-    if (
-        isinstance(left, (int, float))
-        and isinstance(right, (int, float))
-        and not isinstance(left, bool)
-        and not isinstance(right, bool)
-    ):
-        return left == right
-    if type(left) is not type(right):
-        return False
-    if isinstance(left, list):
-        return len(left) == len(right) and all(
-            _json_values_equal(left_item, right_item)
-            for left_item, right_item in zip(left, right, strict=True)
-        )
-    if isinstance(left, dict):
-        return left.keys() == right.keys() and all(
-            _json_values_equal(left[key], right[key]) for key in left
-        )
-    return left == right
-
-
-def _has_duplicate_json_items(values: list[Any]) -> bool:
-    return any(
-        _json_values_equal(values[left_index], values[right_index])
-        for left_index in range(len(values))
-        for right_index in range(left_index + 1, len(values))
-    )
-
-
-def _is_multiple_of(value: int | float, divisor: int | float) -> bool:
-    try:
-        return Decimal(str(value)) % Decimal(str(divisor)) == 0
-    except (InvalidOperation, ZeroDivisionError):
-        return True
 
 
 def _is_absolute_uri(value: str) -> bool:
@@ -163,10 +107,218 @@ def _is_absolute_uri(value: str) -> bool:
     return bool(parsed.scheme and re.fullmatch(r"[A-Za-z][A-Za-z0-9+.-]*", parsed.scheme))
 
 
-def _matches_string_format(value: str, format_name: str) -> bool:
-    if format_name == "uri":
-        return _is_absolute_uri(value)
-    return FORMAT_CHECKER.conforms(value, format_name)
+FORMAT_CHECKER = FormatChecker()
+FORMAT_CHECKER.checks("uri")(_is_absolute_uri)
+
+
+def _with_absolute_local_refs(value: Any) -> Any:
+    """Point schema-local references at the registered full OpenAPI document."""
+    if isinstance(value, dict):
+        rewritten = {key: _with_absolute_local_refs(nested) for key, nested in value.items()}
+        reference = rewritten.get("$ref")
+        if isinstance(reference, str) and reference.startswith("#/"):
+            rewritten["$ref"] = f"{_DOCUMENT_URI}{reference}"
+        return rewritten
+    if isinstance(value, list):
+        return [_with_absolute_local_refs(nested) for nested in value]
+    return value
+
+
+def _with_locatable_boolean_schemas(schema: SchemaDefinition) -> SchemaDefinition:
+    """Express 3.1 boolean schemas so nested library errors retain instance paths."""
+    if schema is True:
+        return {}
+    if schema is False:
+        return {"not": {}}
+
+    rewritten = copy.deepcopy(schema)
+    for keyword in (
+        "contains",
+        "else",
+        "if",
+        "items",
+        "not",
+        "propertyNames",
+        "then",
+        "unevaluatedItems",
+        "unevaluatedProperties",
+    ):
+        nested = rewritten.get(keyword)
+        if isinstance(nested, (dict, bool)):
+            rewritten[keyword] = _with_locatable_boolean_schemas(nested)
+
+    additional_properties = rewritten.get("additionalProperties")
+    if isinstance(additional_properties, dict):
+        rewritten["additionalProperties"] = _with_locatable_boolean_schemas(additional_properties)
+
+    for keyword in (
+        "$defs",
+        "definitions",
+        "dependentSchemas",
+        "patternProperties",
+        "properties",
+    ):
+        nested_schemas = rewritten.get(keyword)
+        if isinstance(nested_schemas, dict):
+            rewritten[keyword] = {
+                name: _with_locatable_boolean_schemas(nested)
+                for name, nested in nested_schemas.items()
+                if isinstance(nested, (dict, bool))
+            }
+
+    for keyword in ("allOf", "anyOf", "oneOf", "prefixItems"):
+        nested_schemas = rewritten.get(keyword)
+        if isinstance(nested_schemas, list):
+            rewritten[keyword] = [
+                _with_locatable_boolean_schemas(nested)
+                if isinstance(nested, (dict, bool))
+                else nested
+                for nested in nested_schemas
+            ]
+    return rewritten
+
+
+def _with_locatable_component_schemas(document: dict[str, Any]) -> dict[str, Any]:
+    rewritten = copy.deepcopy(document)
+    components = rewritten.get("components")
+    if not isinstance(components, dict):
+        return rewritten
+    schemas = components.get("schemas")
+    if not isinstance(schemas, dict):
+        return rewritten
+    components["schemas"] = {
+        name: _with_locatable_boolean_schemas(schema)
+        if isinstance(schema, (dict, bool))
+        else schema
+        for name, schema in schemas.items()
+    }
+    return rewritten
+
+
+def _with_exact_floats(value: Any) -> Any:
+    """Avoid binary-float false positives for JSON Schema multipleOf."""
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {key: _with_exact_floats(nested) for key, nested in value.items()}
+    if isinstance(value, list):
+        return [_with_exact_floats(nested) for nested in value]
+    return value
+
+
+def _variable_paths(value: Any, path: tuple[Any, ...] = ()) -> set[tuple[Any, ...]]:
+    if is_variable_reference(value):
+        return {path}
+    paths: set[tuple[Any, ...]] = set()
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            paths.update(_variable_paths(nested, (*path, key)))
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            paths.update(_variable_paths(nested, (*path, index)))
+    return paths
+
+
+def _path_is_within(path: tuple[Any, ...], parent: tuple[Any, ...]) -> bool:
+    return path[: len(parent)] == parent
+
+
+def _depends_only_on_runtime_variables(
+    error: ValidationError,
+    variable_paths: set[tuple[Any, ...]],
+) -> bool:
+    """Ignore errors that cannot be decided until TestPlan variables are resolved."""
+    if error.schema is False or (error.validator == "not" and error.validator_value == {}):
+        return False
+    error_path = tuple(error.absolute_path)
+    if any(_path_is_within(error_path, variable_path) for variable_path in variable_paths):
+        return True
+    if error.context:
+        return all(
+            _depends_only_on_runtime_variables(child, variable_paths) for child in error.context
+        )
+    return error.validator == "oneOf" and any(
+        _path_is_within(variable_path, error_path) for variable_path in variable_paths
+    )
+
+
+def _violation_code(keyword: str | None) -> ViolationCode:
+    if keyword == "type":
+        return ViolationCode.TYPE_MISMATCH
+    if keyword == "required":
+        return ViolationCode.MISSING_REQUIRED
+    if keyword in {"enum", "const"}:
+        return ViolationCode.INVALID_ENUM
+    if keyword in {
+        "exclusiveMaximum",
+        "exclusiveMinimum",
+        "maximum",
+        "maxItems",
+        "maxLength",
+        "maxProperties",
+        "minimum",
+        "minItems",
+        "minLength",
+        "minProperties",
+        "multipleOf",
+    }:
+        return ViolationCode.OUT_OF_RANGE
+    if keyword in {"format", "pattern"}:
+        return ViolationCode.INVALID_FORMAT
+    if keyword == "additionalProperties":
+        return ViolationCode.ADDITIONAL_PROPERTY
+    return ViolationCode.SCHEMA_MISMATCH
+
+
+def _missing_required_field(error: ValidationError) -> str | None:
+    if not isinstance(error.instance, dict) or not isinstance(error.validator_value, list):
+        return None
+    for name in error.validator_value:
+        if name not in error.instance and error.message == f"{name!r} is a required property":
+            return str(name)
+    return None
+
+
+def _additional_fields(error: ValidationError) -> list[str]:
+    if not isinstance(error.instance, dict) or not isinstance(error.schema, dict):
+        return []
+    properties = error.schema.get("properties", {})
+    if not isinstance(properties, dict):
+        properties = {}
+    return sorted(str(name) for name in error.instance if name not in properties)
+
+
+def _error_violations(error: ValidationError, pointer: str) -> list[SchemaViolation]:
+    error_pointer = pointer
+    for token in error.absolute_path:
+        error_pointer = _child_pointer(error_pointer, token)
+
+    fields: list[str] = []
+    if error.validator == "required":
+        missing = _missing_required_field(error)
+        if missing is not None:
+            fields = [missing]
+    elif error.validator == "additionalProperties":
+        fields = _additional_fields(error)
+
+    if not fields:
+        return [
+            SchemaViolation(
+                code=_violation_code(error.validator),
+                field=_field_from_pointer(error_pointer),
+                pointer=error_pointer,
+                message=error.message,
+            )
+        ]
+    return [
+        SchemaViolation(
+            code=_violation_code(error.validator),
+            field=field,
+            pointer=_child_pointer(error_pointer, field),
+            message=error.message,
+        )
+        for field in fields
+    ]
 
 
 def validate_schema_value(
@@ -177,364 +329,36 @@ def validate_schema_value(
     pointer: str = "",
     reference_stack: tuple[str, ...] = (),
 ) -> list[SchemaViolation]:
-    """Validate a concrete value against the supported OpenAPI schema subset."""
-    if isinstance(schema, bool):
-        if schema:
-            return []
-        return [
-            SchemaViolation(
-                code=ViolationCode.SCHEMA_MISMATCH,
-                field=_field_from_pointer(pointer),
-                pointer=pointer,
-                message="false schema rejects every value",
-            )
-        ]
-    if is_variable_reference(value):
-        return []
+    """Validate a concrete value using the validator for the document's OAS version."""
+    del reference_stack  # Kept for API compatibility with the former recursive validator.
 
-    schema, reference_stack = _resolve_schema(schema, document, reference_stack)
-    if isinstance(schema, bool):
-        return validate_schema_value(
-            value,
-            schema,
-            document,
-            pointer=pointer,
-            reference_stack=reference_stack,
-        )
+    is_openapi_31 = str(document.get("openapi", "")).startswith("3.1.")
+    validator_class = OAS31Validator if is_openapi_31 else OAS30Validator
+    specification = DRAFT202012 if is_openapi_31 else DRAFT4
+    prepared_document = copy.deepcopy(document)
+    prepared_schema: Any = copy.deepcopy(schema)
+    if is_openapi_31:
+        prepared_document = _with_locatable_component_schemas(prepared_document)
+        prepared_schema = _with_locatable_boolean_schemas(prepared_schema)
+    prepared_document = _with_exact_floats(prepared_document)
+    registry = Registry().with_resource(
+        _DOCUMENT_URI,
+        Resource(contents=prepared_document, specification=specification),
+    )
+    prepared_schema = _with_exact_floats(_with_absolute_local_refs(prepared_schema))
+    prepared_value = _with_exact_floats(copy.deepcopy(value))
+    runtime_variable_paths = _variable_paths(value)
+    validator = validator_class(
+        prepared_schema,
+        format_checker=FORMAT_CHECKER,
+        registry=registry,
+    )
+
     violations: list[SchemaViolation] = []
-
-    if value is None and schema.get("nullable") is True:
-        return []
-
-    all_of = schema.get("allOf")
-    if isinstance(all_of, list):
-        for branch in all_of:
-            if isinstance(branch, (dict, bool)):
-                violations.extend(
-                    validate_schema_value(
-                        value,
-                        branch,
-                        document,
-                        pointer=pointer,
-                        reference_stack=reference_stack,
-                    )
-                )
-
-    for keyword, required_matches in (("anyOf", "at_least_one"), ("oneOf", "exactly_one")):
-        branches = schema.get(keyword)
-        if not isinstance(branches, list):
+    for error in validator.iter_errors(prepared_value):
+        if _depends_only_on_runtime_variables(error, runtime_variable_paths):
             continue
-        branch_results = [
-            validate_schema_value(
-                value,
-                branch,
-                document,
-                pointer=pointer,
-                reference_stack=reference_stack,
-            )
-            for branch in branches
-            if isinstance(branch, (dict, bool))
-        ]
-        match_count = sum(not branch_violations for branch_violations in branch_results)
-        matches = match_count >= 1 if required_matches == "at_least_one" else match_count == 1
-        if not matches and not (
-            keyword == "oneOf" and match_count > 1 and variable_references(value)
-        ):
-            expectation = "at least one" if keyword == "anyOf" else "exactly one"
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.SCHEMA_MISMATCH,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=(
-                        f"value must match {expectation} {keyword} branch; matched {match_count}"
-                    ),
-                )
-            )
-
-    expected_type = schema.get("type")
-    if not _matches_json_type(value, expected_type):
-        return [
-            SchemaViolation(
-                code=ViolationCode.TYPE_MISMATCH,
-                field=_field_from_pointer(pointer),
-                pointer=pointer,
-                message=f"expected {expected_type}, received {type(value).__name__}",
-            )
-        ]
-
-    if "const" in schema and not _json_values_equal(value, schema["const"]):
-        violations.append(
-            SchemaViolation(
-                code=ViolationCode.INVALID_ENUM,
-                field=_field_from_pointer(pointer),
-                pointer=pointer,
-                message=f"value {value!r} must equal {schema['const']!r}",
-            )
-        )
-
-    enum_values = schema.get("enum")
-    if isinstance(enum_values, list) and not any(
-        _json_values_equal(value, candidate) for candidate in enum_values
-    ):
-        violations.append(
-            SchemaViolation(
-                code=ViolationCode.INVALID_ENUM,
-                field=_field_from_pointer(pointer),
-                pointer=pointer,
-                message=f"value {value!r} is not one of {enum_values!r}",
-            )
-        )
-
-    if isinstance(value, dict):
-        required = schema.get("required", [])
-        if isinstance(required, list):
-            for field_name in required:
-                if isinstance(field_name, str) and field_name not in value:
-                    field_pointer = _child_pointer(pointer, field_name)
-                    violations.append(
-                        SchemaViolation(
-                            code=ViolationCode.MISSING_REQUIRED,
-                            field=field_name,
-                            pointer=field_pointer,
-                            message=f"required field {field_name!r} is missing",
-                        )
-                    )
-
-        properties = schema.get("properties", {})
-        if not isinstance(properties, dict):
-            properties = {}
-        additional_properties = schema.get("additionalProperties")
-        for field_name, field_value in value.items():
-            if field_name in properties and isinstance(properties[field_name], (dict, bool)):
-                violations.extend(
-                    validate_schema_value(
-                        field_value,
-                        properties[field_name],
-                        document,
-                        pointer=_child_pointer(pointer, field_name),
-                        reference_stack=reference_stack,
-                    )
-                )
-            elif isinstance(additional_properties, dict):
-                violations.extend(
-                    validate_schema_value(
-                        field_value,
-                        additional_properties,
-                        document,
-                        pointer=_child_pointer(pointer, field_name),
-                        reference_stack=reference_stack,
-                    )
-                )
-            elif additional_properties is False:
-                violations.append(
-                    SchemaViolation(
-                        code=ViolationCode.ADDITIONAL_PROPERTY,
-                        field=field_name,
-                        pointer=_child_pointer(pointer, field_name),
-                        message=f"additional field {field_name!r} is not allowed",
-                    )
-                )
-
-        minimum_properties = schema.get("minProperties")
-        if isinstance(minimum_properties, int) and len(value) < minimum_properties:
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.OUT_OF_RANGE,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"object requires at least {minimum_properties} properties",
-                )
-            )
-        maximum_properties = schema.get("maxProperties")
-        if isinstance(maximum_properties, int) and len(value) > maximum_properties:
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.OUT_OF_RANGE,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"object allows at most {maximum_properties} properties",
-                )
-            )
-
-    if isinstance(value, list):
-        item_schema = schema.get("items")
-        if isinstance(item_schema, (dict, bool)):
-            for index, item in enumerate(value):
-                violations.extend(
-                    validate_schema_value(
-                        item,
-                        item_schema,
-                        document,
-                        pointer=_child_pointer(pointer, index),
-                        reference_stack=reference_stack,
-                    )
-                )
-        minimum_items = schema.get("minItems")
-        maximum_items = schema.get("maxItems")
-        if isinstance(minimum_items, int) and len(value) < minimum_items:
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.OUT_OF_RANGE,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"array requires at least {minimum_items} items",
-                )
-            )
-        if isinstance(maximum_items, int) and len(value) > maximum_items:
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.OUT_OF_RANGE,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"array allows at most {maximum_items} items",
-                )
-            )
-        if schema.get("uniqueItems") is True and _has_duplicate_json_items(value):
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.SCHEMA_MISMATCH,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message="array items must be unique",
-                )
-            )
-
-    if isinstance(value, str):
-        minimum_length = schema.get("minLength")
-        maximum_length = schema.get("maxLength")
-        if isinstance(minimum_length, int) and len(value) < minimum_length:
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.OUT_OF_RANGE,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"string is shorter than {minimum_length}",
-                )
-            )
-        if isinstance(maximum_length, int) and len(value) > maximum_length:
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.OUT_OF_RANGE,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"string is longer than {maximum_length}",
-                )
-            )
-        pattern = schema.get("pattern")
-        if isinstance(pattern, str) and re.search(pattern, value) is None:
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.INVALID_FORMAT,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"string does not match pattern {pattern!r}",
-                )
-            )
-        format_name = schema.get("format")
-        if (
-            isinstance(format_name, str)
-            and format_name in SUPPORTED_STRING_FORMATS
-            and not _matches_string_format(value, format_name)
-        ):
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.INVALID_FORMAT,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"string does not match format {format_name!r}",
-                )
-            )
-
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        minimum = schema.get("minimum")
-        maximum = schema.get("maximum")
-        multiple_of = schema.get("multipleOf")
-        exclusive_minimum = schema.get("exclusiveMinimum")
-        exclusive_maximum = schema.get("exclusiveMaximum")
-        is_openapi_31 = str(document.get("openapi", "")).startswith("3.1.")
-
-        if (
-            isinstance(multiple_of, (int, float))
-            and not isinstance(multiple_of, bool)
-            and not _is_multiple_of(value, multiple_of)
-        ):
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.OUT_OF_RANGE,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"value must be a multiple of {multiple_of}",
-                )
-            )
-
-        minimum_violated = (
-            isinstance(minimum, (int, float))
-            and not isinstance(minimum, bool)
-            and (
-                value <= minimum
-                if not is_openapi_31 and exclusive_minimum is True
-                else value < minimum
-            )
-        )
-        if minimum_violated:
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.OUT_OF_RANGE,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"value violates minimum {minimum}",
-                )
-            )
-
-        maximum_violated = (
-            isinstance(maximum, (int, float))
-            and not isinstance(maximum, bool)
-            and (
-                value >= maximum
-                if not is_openapi_31 and exclusive_maximum is True
-                else value > maximum
-            )
-        )
-        if maximum_violated:
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.OUT_OF_RANGE,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"value violates maximum {maximum}",
-                )
-            )
-
-        if (
-            is_openapi_31
-            and isinstance(exclusive_minimum, (int, float))
-            and not isinstance(exclusive_minimum, bool)
-            and value <= exclusive_minimum
-        ):
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.OUT_OF_RANGE,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"value must be greater than {exclusive_minimum}",
-                )
-            )
-        if (
-            is_openapi_31
-            and isinstance(exclusive_maximum, (int, float))
-            and not isinstance(exclusive_maximum, bool)
-            and value >= exclusive_maximum
-        ):
-            violations.append(
-                SchemaViolation(
-                    code=ViolationCode.OUT_OF_RANGE,
-                    field=_field_from_pointer(pointer),
-                    pointer=pointer,
-                    message=f"value must be less than {exclusive_maximum}",
-                )
-            )
-
+        violations.extend(_error_violations(error, pointer))
     return violations
 
 

@@ -332,6 +332,13 @@ does not receive runtime coverage or test-execution feedback in V1.
 
 ## 10. Validation Pipeline
 
+OpenAPI documents are first checked by `openapi-spec-validator` and then
+normalized into the framework's operation model. Standard Schema keyword
+evaluation for concrete TestPlan values is delegated to
+`openapi-schema-validator`; the framework-owned adapter only handles TestPlan
+variables, stable violation codes, error locations, and the documented V1
+support boundary.
+
 Plans pass through three deterministic stages before execution:
 
 1. **Structural validation** verifies the Pydantic contract and rejects unknown
@@ -348,7 +355,8 @@ plans remain available as artifacts but are never executed.
 
 The runner executes scenario steps in order using HTTPX. It supports scoped
 variables, response extraction, cleanup, request deadlines, and sanitized event
-logging.
+logging. Runtime OpenAPI request and response validation is delegated to
+`openapi-core`; it is not reimplemented in the runner.
 
 The runner classifies failures rather than returning a single generic error.
 Initial categories include:
@@ -620,6 +628,9 @@ way around.
 
 - Python 3.12 managed with uv.
 - Pydantic for contracts and validation.
+- `openapi-spec-validator` for OpenAPI document validation.
+- `openapi-schema-validator` for static Schema value validation.
+- `openapi-core` for runtime HTTP request and response validation.
 - HTTPX for HTTP execution and provider calls.
 - PyYAML for human-readable plan and configuration artifacts.
 - Typer and Rich for the CLI.
