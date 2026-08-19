@@ -2,6 +2,12 @@ import pytest
 from pydantic import ValidationError
 
 from openapi_ai_test_evaluator.domain import TestPlan as PlanModel
+from openapi_ai_test_evaluator.domain.test_plan import (
+    LIFECYCLE_RELATION_TYPES,
+    METAMORPHIC_RELATION_TYPES,
+    RelationKind,
+    RelationType,
+)
 
 
 def minimal_plan() -> dict[str, object]:
@@ -61,3 +67,10 @@ def test_schema_contains_top_level_contract() -> None:
         "scenarios",
     }
     assert "schema_mismatch" in schema["$defs"]["ViolationCode"]["enum"]
+
+
+def test_relation_types_have_disjoint_explicit_kinds() -> None:
+    assert METAMORPHIC_RELATION_TYPES.isdisjoint(LIFECYCLE_RELATION_TYPES)
+    assert METAMORPHIC_RELATION_TYPES | LIFECYCLE_RELATION_TYPES == set(RelationType)
+    assert RelationType.QUERY_ORDER.kind is RelationKind.METAMORPHIC
+    assert RelationType.CREATE_READ.kind is RelationKind.LIFECYCLE

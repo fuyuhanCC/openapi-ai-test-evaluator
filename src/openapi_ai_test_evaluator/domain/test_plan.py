@@ -64,6 +64,11 @@ class CleanupWhen(StrEnum):
     ON_FAILURE = "on_failure"
 
 
+class RelationKind(StrEnum):
+    METAMORPHIC = "metamorphic"
+    LIFECYCLE = "lifecycle"
+
+
 class RelationType(StrEnum):
     REPEATED_READ = "repeated_read_consistency"
     QUERY_ORDER = "query_parameter_order_invariance"
@@ -71,6 +76,30 @@ class RelationType(StrEnum):
     CREATE_READ = "create_read_consistency"
     UPDATE_READ = "update_read_consistency"
     DELETE_READ = "delete_read_consistency"
+
+    @property
+    def kind(self) -> RelationKind:
+        if self in METAMORPHIC_RELATION_TYPES:
+            return RelationKind.METAMORPHIC
+        if self in LIFECYCLE_RELATION_TYPES:
+            return RelationKind.LIFECYCLE
+        raise ValueError(f"relation type {self.value!r} has no explicit kind")
+
+
+METAMORPHIC_RELATION_TYPES = frozenset(
+    {
+        RelationType.REPEATED_READ,
+        RelationType.QUERY_ORDER,
+        RelationType.PAGINATION,
+    }
+)
+LIFECYCLE_RELATION_TYPES = frozenset(
+    {
+        RelationType.CREATE_READ,
+        RelationType.UPDATE_READ,
+        RelationType.DELETE_READ,
+    }
+)
 
 
 class PaginationMode(StrEnum):
@@ -251,7 +280,7 @@ class RelationFieldPair(ContractModel):
     follow_up: RelationFieldReference
 
 
-class MetamorphicRelation(ContractModel):
+class ScenarioRelation(ContractModel):
     id: Identifier
     type: RelationType
     source_step: Identifier
@@ -266,6 +295,10 @@ class MetamorphicRelation(ContractModel):
     baseline_step: Identifier | None = None
     stable_follow_up_pointers: list[JsonPointer] = Field(default_factory=list)
     accepted_follow_up_statuses: list[int] = Field(default_factory=list)
+
+    @property
+    def kind(self) -> RelationKind:
+        return self.type.kind
 
     @model_validator(mode="after")
     def validate_relation_arguments(self) -> Self:
@@ -300,7 +333,7 @@ class Scenario(ContractModel):
     setup: list[RequestStep] = Field(default_factory=list)
     steps: list[RequestStep] = Field(min_length=1)
     cleanup: list[CleanupStep] = Field(default_factory=list)
-    relations: list[MetamorphicRelation] = Field(default_factory=list)
+    relations: list[ScenarioRelation] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_step_and_relation_ids(self) -> Self:

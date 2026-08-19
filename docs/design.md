@@ -55,9 +55,10 @@ V1 will:
    safety.
 6. Execute HTTP scenarios with deterministic assertions and error
    classification.
-7. Support six explicit metamorphic relations.
+7. Support three explicit metamorphic relations and three lifecycle consistency
+   checks.
 8. Inject deterministic response faults through a reusable HTTP fault proxy.
-9. Run a paired A/B/C experiment against PetClinic.
+9. Run a four-arm controlled experiment against PetClinic.
 10. Produce machine-readable and human-readable evaluation artifacts.
 11. Provide reproducible local and CI workflows with uv, Docker Compose, and
     GitHub Actions.
@@ -168,8 +169,10 @@ flowchart TD
     validation --> runner["Deterministic HTTP runner"]
     runner --> oracles["Protocol, schema, and field oracles"]
     runner --> metamorphic["Metamorphic relation engine"]
+    runner --> lifecycle["Lifecycle consistency oracles"]
     oracles --> result["RunResult"]
     metamorphic --> result
+    lifecycle --> result
     result --> evaluator["Experiment evaluator"]
     evaluator --> reports["JSON, JUnit XML, and HTML reports"]
 ```
@@ -216,7 +219,8 @@ The normalized representation of one OpenAPI operation contains:
 - Response value extractions.
 - Declarative assertions.
 - Optional setup and cleanup steps.
-- Optional metamorphic relation definitions.
+- Optional scenario relations, classified as metamorphic relations or lifecycle
+  consistency checks.
 
 YAML is the canonical human-readable artifact format. DeepSeek is asked to
 return JSON because it is easier to validate strictly; validated JSON is then
@@ -370,14 +374,20 @@ Initial categories include:
 - `assertion_failed`
 - `extraction_failed`
 - `metamorphic_relation_violated`
+- `lifecycle_consistency_violated`
 - `sut_unavailable`
 
 An LLM response is never consulted by the runner after generation.
 
-## 12. Metamorphic Testing
+## 12. Scenario Relations
 
-Metamorphic testing creates a follow-up request from a source request and checks
-a deterministic relation between their results. Each relation declares:
+### 12.1 Metamorphic testing
+
+Metamorphic testing is an established testing technique rather than a
+project-specific term; see the
+[IEEE survey by Segura et al.](https://doi.org/10.1109/TSE.2016.2532875).
+It creates a follow-up request by transforming a source request and checks a
+deterministic relation between their results. Each relation declares:
 
 - Applicability conditions.
 - Source request.
@@ -389,42 +399,48 @@ a deterministic relation between their results. Each relation declares:
 If applicability cannot be established, the result is `not_applicable`, not a
 pass or failure.
 
-### MR1: Repeated-read consistency
+#### MR1: Repeated-read consistency
 
 Repeat the same safe read while the SUT state is unchanged. Stable selected
 fields must remain equal. Volatile fields such as timestamps and trace IDs are
 excluded explicitly.
 
-### MR2: Query-parameter order invariance
+#### MR2: Query-parameter order invariance
 
 Send semantically identical requests with distinct query parameters in a
 different order. Canonicalized responses must be equivalent. If list order is
 not part of the API contract, values are compared by configured stable keys.
 
-### MR3: Pagination monotonicity
+#### MR3: Pagination monotonicity
 
 For the same filters and offset, increase the page limit. Under stable ordering
 and unchanged state, identifiers from the smaller result must be a subset or
 prefix of the larger result.
 
-### MR4: Create-read consistency
+### 12.2 Lifecycle consistency checks
+
+The following checks validate stateful API workflows. They are scenario
+relations, but they are not classified as metamorphic testing because they do
+not derive a follow-up test through the same input-transformation principle.
+
+#### Create-read consistency
 
 Create a resource, extract its identifier, and read it back. Fields accepted in
 the create request must agree with the corresponding retrievable fields, subject
 to documented server normalization.
 
-### MR5: Update-read consistency
+#### Update-read consistency
 
 Update selected fields and read the resource again. Updated fields must reflect
 the new values, while configured untouched stable fields remain unchanged.
 
-### MR6: Delete-read consistency
+#### Delete-read consistency
 
 Delete a resource and attempt to retrieve it again. The resource must be absent
 or the API must return one of the documented not-found outcomes.
 
-Relations that require unsupported endpoint behavior, such as pagination on an
-API without pagination, are excluded from that benchmark's denominator.
+Checks that require unsupported endpoint behavior, such as pagination on an API
+without pagination, are excluded from that benchmark's denominator.
 
 ## 13. Fault Injection
 
@@ -469,12 +485,15 @@ is frozen.
 | Arm | Base test generation | Metamorphic expansion |
 | --- | --- | --- |
 | A | Rule-based generator | Disabled |
-| B | DeepSeek generator | Disabled |
-| C | The exact base plan produced for B | Enabled |
+| B | The exact base plan produced for A | Enabled |
+| C | DeepSeek generator | Disabled |
+| D | The exact base plan produced for C | Enabled |
 
-B and C form a paired comparison. C reuses B's base plan and only adds
-deterministic metamorphic follow-up tests, isolating the value of metamorphic
-expansion from LLM sampling variance.
+A/B and C/D form paired comparisons. B and D only add deterministic
+metamorphic follow-up tests to their corresponding base plans, isolating the
+value of metamorphic expansion from both generator choice and LLM sampling
+variance. Stateful lifecycle scenarios are normal base-plan capabilities and
+may appear in every arm; they are not added only to the metamorphic arms.
 
 ### 14.2 Protocol
 
@@ -482,7 +501,7 @@ The benchmark uses three paired repetitions. For each repetition:
 
 1. Record the complete configuration and environment manifest.
 2. Produce the rule-based plan and one independent DeepSeek plan.
-3. Derive C deterministically from the DeepSeek plan used by B.
+3. Derive B deterministically from A and D deterministically from C.
 4. Reset PetClinic to a known state.
 5. Execute each plan through the proxy in pass-through mode.
 6. Exclude or diagnose tests that fail on the clean baseline.
@@ -688,7 +707,7 @@ untrusted pull request.
 | --- | --- |
 | Incomplete or ambiguous OpenAPI documents | Report structured unsupported and unresolved-operation reasons. |
 | Invalid LLM output | Strict schema validation and at most one format-only repair request. |
-| LLM nondeterminism | Paired B/C design, three repetitions, and complete raw artifacts. |
+| LLM nondeterminism | Paired C/D design, three repetitions, and complete raw artifacts. |
 | False positives from volatile response fields | Explicit comparison projections and clean-baseline eligibility. |
 | State contamination between faults | Recreate or reset the SUT before each fault. |
 | Equivalent or unreachable faults | Require reference tests before freezing the benchmark. |
@@ -705,10 +724,11 @@ V1 is complete when:
 2. Rule-based and DeepSeek generators produce the same `TestPlan` contract.
 3. Invalid or unsafe plans are deterministically rejected before execution.
 4. The runner never executes generated code.
-5. All six metamorphic relations have unit tests and executable examples.
+5. All three metamorphic relations and all three lifecycle consistency checks
+   have unit tests and executable examples.
 6. All 12 PetClinic faults can be enabled independently and have reference
    tests.
-7. Three complete A/B/C repetitions have been recorded.
+7. Three complete four-arm repetitions have been recorded.
 8. JSON, JUnit XML, and HTML reports are generated from the same raw results.
 9. `uv run pytest` passes in a clean checkout.
 10. Docker Compose reproduces the PetClinic benchmark environment.

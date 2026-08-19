@@ -16,11 +16,11 @@ from openapi_ai_test_evaluator.domain.openapi import (
 from openapi_ai_test_evaluator.domain.test_plan import (
     AssertionOperator,
     ContractModel,
-    MetamorphicRelation,
     RelationType,
     RequestMode,
     RequestStep,
     Scenario,
+    ScenarioRelation,
     TestPlan,
     ViolationCode,
 )
@@ -482,8 +482,8 @@ def _schema_type_names(schema: dict[str, Any]) -> set[str] | None:
     return None
 
 
-def _validate_relation(
-    relation: MetamorphicRelation,
+def _validate_scenario_relation(
+    relation: ScenarioRelation,
     step_models: dict[str, tuple[RequestStep, OperationModel]],
     step_positions: dict[str, int],
     spec: OpenAPISpec,
@@ -858,7 +858,9 @@ def _validate_scenario(
 
     for relation_index, relation in enumerate(scenario.relations):
         path = f"scenarios[{scenario_index}].relations[{relation_index}]"
-        issues.extend(_validate_relation(relation, step_models, step_positions, spec, path))
+        issues.extend(
+            _validate_scenario_relation(relation, step_models, step_positions, spec, path)
+        )
     return issues
 
 

@@ -3,7 +3,7 @@ kind: TestPlan
 
 metadata:
   name: lifecycle-scenarios
-  description: Representative multi-step workflows with response extraction.
+  description: Multi-step workflows with three explicit lifecycle consistency checks.
   generator:
     type: manual
 
@@ -42,6 +42,24 @@ scenarios:
               source: response.body
               pointer: /name
             expected: Created Item
+    relations:
+      - id: created-fields-readable
+        type: create_read_consistency
+        source_step: create
+        follow_up_step: read-created
+        field_pairs:
+          - source:
+              location: request.body
+              pointer: /name
+            follow_up:
+              location: response.body
+              pointer: /name
+          - source:
+              location: request.body
+              pointer: /price
+            follow_up:
+              location: response.body
+              pointer: /price
     cleanup:
       - id: cleanup-created
         operation_id: deleteItem
@@ -88,6 +106,20 @@ scenarios:
               source: response.body
               pointer: /name
             expected: After Update
+    relations:
+      - id: updated-fields-visible
+        type: update_read_consistency
+        baseline_step: create
+        source_step: update
+        follow_up_step: read-updated
+        field_pairs:
+          - source:
+              location: request.body
+              pointer: /name
+            follow_up:
+              location: response.body
+              pointer: /name
+        stable_follow_up_pointers: [/id]
     cleanup:
       - id: cleanup-updated
         operation_id: deleteItem
@@ -129,6 +161,12 @@ scenarios:
         assertions:
           - operator: status_is
             expected: 404
+    relations:
+      - id: deleted-item-unavailable
+        type: delete_read_consistency
+        source_step: delete
+        follow_up_step: read-deleted
+        accepted_follow_up_statuses: [404]
     cleanup:
       - id: cleanup-deleted
         operation_id: deleteItem

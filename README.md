@@ -42,7 +42,7 @@ uv run oate plan validate --plan examples/plans/metamorphic.yaml
 ```
 
 Also check operation IDs, parameters, request schemas, response contracts, and
-metamorphic references against an OpenAPI document:
+scenario relations against an OpenAPI document:
 
 ```bash
 uv run oate plan validate \

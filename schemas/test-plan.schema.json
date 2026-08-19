@@ -244,138 +244,6 @@
       "type": "string"
     },
     "JsonValue": {},
-    "MetamorphicRelation": {
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "pattern": "^[a-z][a-z0-9-]*$",
-          "title": "Id",
-          "type": "string"
-        },
-        "type": {
-          "$ref": "#/$defs/RelationType"
-        },
-        "source_step": {
-          "pattern": "^[a-z][a-z0-9-]*$",
-          "title": "Source Step",
-          "type": "string"
-        },
-        "follow_up_step": {
-          "pattern": "^[a-z][a-z0-9-]*$",
-          "title": "Follow Up Step",
-          "type": "string"
-        },
-        "compare_pointers": {
-          "items": {
-            "pattern": "^(|/.*)$",
-            "type": "string"
-          },
-          "title": "Compare Pointers",
-          "type": "array"
-        },
-        "ignore_pointers": {
-          "items": {
-            "pattern": "^(|/.*)$",
-            "type": "string"
-          },
-          "title": "Ignore Pointers",
-          "type": "array"
-        },
-        "collection_pointer": {
-          "anyOf": [
-            {
-              "pattern": "^(|/.*)$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Collection Pointer"
-        },
-        "item_key_pointer": {
-          "anyOf": [
-            {
-              "pattern": "^(|/.*)$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Item Key Pointer"
-        },
-        "mode": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/PaginationMode"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "page_size_parameter": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Page Size Parameter"
-        },
-        "field_pairs": {
-          "items": {
-            "$ref": "#/$defs/RelationFieldPair"
-          },
-          "title": "Field Pairs",
-          "type": "array"
-        },
-        "baseline_step": {
-          "anyOf": [
-            {
-              "pattern": "^[a-z][a-z0-9-]*$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Baseline Step"
-        },
-        "stable_follow_up_pointers": {
-          "items": {
-            "pattern": "^(|/.*)$",
-            "type": "string"
-          },
-          "title": "Stable Follow Up Pointers",
-          "type": "array"
-        },
-        "accepted_follow_up_statuses": {
-          "items": {
-            "type": "integer"
-          },
-          "title": "Accepted Follow Up Statuses",
-          "type": "array"
-        }
-      },
-      "required": [
-        "id",
-        "type",
-        "source_step",
-        "follow_up_step"
-      ],
-      "title": "MetamorphicRelation",
-      "type": "object"
-    },
     "PaginationMode": {
       "enum": [
         "subset",
@@ -695,7 +563,7 @@
         },
         "relations": {
           "items": {
-            "$ref": "#/$defs/MetamorphicRelation"
+            "$ref": "#/$defs/ScenarioRelation"
           },
           "title": "Relations",
           "type": "array"
@@ -706,6 +574,138 @@
         "steps"
       ],
       "title": "Scenario",
+      "type": "object"
+    },
+    "ScenarioRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/RelationType"
+        },
+        "source_step": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Source Step",
+          "type": "string"
+        },
+        "follow_up_step": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Follow Up Step",
+          "type": "string"
+        },
+        "compare_pointers": {
+          "items": {
+            "pattern": "^(|/.*)$",
+            "type": "string"
+          },
+          "title": "Compare Pointers",
+          "type": "array"
+        },
+        "ignore_pointers": {
+          "items": {
+            "pattern": "^(|/.*)$",
+            "type": "string"
+          },
+          "title": "Ignore Pointers",
+          "type": "array"
+        },
+        "collection_pointer": {
+          "anyOf": [
+            {
+              "pattern": "^(|/.*)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Collection Pointer"
+        },
+        "item_key_pointer": {
+          "anyOf": [
+            {
+              "pattern": "^(|/.*)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Item Key Pointer"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PaginationMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "page_size_parameter": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Size Parameter"
+        },
+        "field_pairs": {
+          "items": {
+            "$ref": "#/$defs/RelationFieldPair"
+          },
+          "title": "Field Pairs",
+          "type": "array"
+        },
+        "baseline_step": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Baseline Step"
+        },
+        "stable_follow_up_pointers": {
+          "items": {
+            "pattern": "^(|/.*)$",
+            "type": "string"
+          },
+          "title": "Stable Follow Up Pointers",
+          "type": "array"
+        },
+        "accepted_follow_up_statuses": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Accepted Follow Up Statuses",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "source_step",
+        "follow_up_step"
+      ],
+      "title": "ScenarioRelation",
       "type": "object"
     },
     "Target": {

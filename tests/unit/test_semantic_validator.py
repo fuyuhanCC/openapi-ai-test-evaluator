@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from openapi_ai_test_evaluator.domain import TestPlan as PlanModel
+from openapi_ai_test_evaluator.domain.test_plan import RelationKind
 from openapi_ai_test_evaluator.spec import load_openapi
 from openapi_ai_test_evaluator.validation import load_test_plan, validate_plan_semantics
 
@@ -34,6 +35,16 @@ def test_reviewed_plans_match_demo_openapi(plan_path: Path, spec_path: Path) -> 
 
 def _minimal_plan_data() -> dict[str, object]:
     return deepcopy(load_test_plan(PLAN_DIR / "minimal-get.yaml").model_dump(mode="json"))
+
+
+def _plan_data_with_relation(relation_type: str) -> dict[str, object]:
+    lifecycle_types = {
+        "create_read_consistency",
+        "update_read_consistency",
+        "delete_read_consistency",
+    }
+    filename = "lifecycle.yaml" if relation_type in lifecycle_types else "metamorphic.yaml"
+    return deepcopy(load_test_plan(PLAN_DIR / filename).model_dump(mode="json"))
 
 
 def _first_step(plan_data: dict[str, object]) -> dict[str, object]:
@@ -77,6 +88,22 @@ def _step(scenario: dict[str, object], step_id: str) -> dict[str, object]:
             if step["id"] == step_id:
                 return step
     raise AssertionError(f"missing step {step_id}")
+
+
+def test_relation_examples_are_separated_by_kind() -> None:
+    metamorphic_plan = load_test_plan(PLAN_DIR / "metamorphic.yaml")
+    lifecycle_plan = load_test_plan(PLAN_DIR / "lifecycle.yaml")
+    metamorphic_relations = [
+        relation for scenario in metamorphic_plan.scenarios for relation in scenario.relations
+    ]
+    lifecycle_relations = [
+        relation for scenario in lifecycle_plan.scenarios for relation in scenario.relations
+    ]
+
+    assert len(metamorphic_relations) == 3
+    assert {relation.kind for relation in metamorphic_relations} == {RelationKind.METAMORPHIC}
+    assert len(lifecycle_relations) == 3
+    assert {relation.kind for relation in lifecycle_relations} == {RelationKind.LIFECYCLE}
 
 
 def test_reports_unknown_operation() -> None:
@@ -183,7 +210,7 @@ def test_reports_missing_required_body_and_unexpected_body() -> None:
 
 
 def test_query_order_relation_rejects_different_parameter_values() -> None:
-    plan_data = deepcopy(load_test_plan(PLAN_DIR / "metamorphic.yaml").model_dump(mode="json"))
+    plan_data = _plan_data_with_relation("query_parameter_order_invariance")
     scenario = _scenario_with_relation(plan_data, "query_parameter_order_invariance")
     steps = scenario["steps"]
     assert isinstance(steps, list)
@@ -195,7 +222,7 @@ def test_query_order_relation_rejects_different_parameter_values() -> None:
 
 
 def test_query_order_relation_requires_order_to_change() -> None:
-    plan_data = deepcopy(load_test_plan(PLAN_DIR / "metamorphic.yaml").model_dump(mode="json"))
+    plan_data = _plan_data_with_relation("query_parameter_order_invariance")
     scenario = _scenario_with_relation(plan_data, "query_parameter_order_invariance")
     steps = scenario["steps"]
     assert isinstance(steps, list)
@@ -207,7 +234,7 @@ def test_query_order_relation_requires_order_to_change() -> None:
 
 
 def test_pagination_relation_requires_explicit_page_size_parameter() -> None:
-    plan_data = deepcopy(load_test_plan(PLAN_DIR / "metamorphic.yaml").model_dump(mode="json"))
+    plan_data = _plan_data_with_relation("pagination_monotonicity")
     scenario = _scenario_with_relation(plan_data, "pagination_monotonicity")
     del _relation(scenario)["page_size_parameter"]
 
@@ -216,7 +243,7 @@ def test_pagination_relation_requires_explicit_page_size_parameter() -> None:
 
 
 def test_update_stable_fields_require_a_baseline_step() -> None:
-    plan_data = deepcopy(load_test_plan(PLAN_DIR / "metamorphic.yaml").model_dump(mode="json"))
+    plan_data = _plan_data_with_relation("update_read_consistency")
     scenario = _scenario_with_relation(plan_data, "update_read_consistency")
     _relation(scenario)["baseline_step"] = None
 
@@ -225,7 +252,7 @@ def test_update_stable_fields_require_a_baseline_step() -> None:
 
 
 def test_repeated_read_requires_equivalent_requests() -> None:
-    plan_data = deepcopy(load_test_plan(PLAN_DIR / "metamorphic.yaml").model_dump(mode="json"))
+    plan_data = _plan_data_with_relation("repeated_read_consistency")
     scenario = _scenario_with_relation(plan_data, "repeated_read_consistency")
     second_read = _step(scenario, "second-read")
     second_read["request"]["path"]["itemId"] = 999
@@ -236,7 +263,7 @@ def test_repeated_read_requires_equivalent_requests() -> None:
 
 
 def test_pagination_relation_requires_fixed_context_and_increasing_size() -> None:
-    plan_data = deepcopy(load_test_plan(PLAN_DIR / "metamorphic.yaml").model_dump(mode="json"))
+    plan_data = _plan_data_with_relation("pagination_monotonicity")
     scenario = _scenario_with_relation(plan_data, "pagination_monotonicity")
     large_page = _step(scenario, "large-page")
     large_page["request"]["query"][0]["value"] = 1
@@ -250,9 +277,9 @@ def test_pagination_relation_requires_fixed_context_and_increasing_size() -> Non
 
 
 def test_create_read_requires_extracted_resource_link() -> None:
-    plan_data = deepcopy(load_test_plan(PLAN_DIR / "metamorphic.yaml").model_dump(mode="json"))
+    plan_data = _plan_data_with_relation("create_read_consistency")
     scenario = _scenario_with_relation(plan_data, "create_read_consistency")
-    read = _step(scenario, "read")
+    read = _step(scenario, "read-created")
     read["request"]["path"]["itemId"] = 1
 
     issues = validate_plan_semantics(PlanModel.model_validate(plan_data), SPEC)
@@ -261,7 +288,7 @@ def test_create_read_requires_extracted_resource_link() -> None:
 
 
 def test_update_read_requires_same_resource_and_compatible_fields() -> None:
-    plan_data = deepcopy(load_test_plan(PLAN_DIR / "metamorphic.yaml").model_dump(mode="json"))
+    plan_data = _plan_data_with_relation("update_read_consistency")
     scenario = _scenario_with_relation(plan_data, "update_read_consistency")
     read = _step(scenario, "read-updated")
     read["request"]["path"]["itemId"] = 999
@@ -276,7 +303,7 @@ def test_update_read_requires_same_resource_and_compatible_fields() -> None:
 
 
 def test_relation_type_compatibility_supports_openapi_31_type_arrays() -> None:
-    plan_data = deepcopy(load_test_plan(PLAN_DIR / "metamorphic.yaml").model_dump(mode="json"))
+    plan_data = _plan_data_with_relation("create_read_consistency")
     scenario = _scenario_with_relation(plan_data, "create_read_consistency")
     pair = _relation(scenario)["field_pairs"][0]
     pair["source"]["pointer"] = "/category"
@@ -291,7 +318,7 @@ def test_relation_type_compatibility_supports_openapi_31_type_arrays() -> None:
 
 
 def test_delete_read_requires_delete_method_and_success_assertion() -> None:
-    plan_data = deepcopy(load_test_plan(PLAN_DIR / "metamorphic.yaml").model_dump(mode="json"))
+    plan_data = _plan_data_with_relation("delete_read_consistency")
     scenario = _scenario_with_relation(plan_data, "delete_read_consistency")
     delete = _step(scenario, "delete")
     delete["operation_id"] = "updateItem"
@@ -305,7 +332,7 @@ def test_delete_read_requires_delete_method_and_success_assertion() -> None:
 
 
 def test_relation_steps_must_follow_execution_order() -> None:
-    plan_data = deepcopy(load_test_plan(PLAN_DIR / "metamorphic.yaml").model_dump(mode="json"))
+    plan_data = _plan_data_with_relation("repeated_read_consistency")
     scenario = _scenario_with_relation(plan_data, "repeated_read_consistency")
     relation = _relation(scenario)
     relation["source_step"], relation["follow_up_step"] = (
