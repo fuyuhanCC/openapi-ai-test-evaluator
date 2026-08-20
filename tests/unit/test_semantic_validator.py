@@ -177,6 +177,42 @@ def test_reports_unknown_runtime_variable() -> None:
     assert "unknown_variable" in {issue.code for issue in issues}
 
 
+def test_rejects_composite_http_parameter_value() -> None:
+    plan_data = _minimal_plan_data()
+    request = _first_step(plan_data)["request"]
+    assert isinstance(request, dict)
+    request["query"] = [{"name": "status", "value": ["active", "inactive"]}]
+
+    issues = validate_plan_semantics(PlanModel.model_validate(plan_data), SPEC)
+
+    assert "unsupported_parameter_serialization" in {issue.code for issue in issues}
+
+
+def test_rejects_plan_variable_that_resolves_to_composite_http_parameter() -> None:
+    plan_data = _minimal_plan_data()
+    variables = plan_data["variables"]
+    assert isinstance(variables, dict)
+    variables["statuses"] = ["active", "inactive"]
+    request = _first_step(plan_data)["request"]
+    assert isinstance(request, dict)
+    request["query"] = [{"name": "status", "value": {"$var": "statuses"}}]
+
+    issues = validate_plan_semantics(PlanModel.model_validate(plan_data), SPEC)
+
+    assert "unsupported_parameter_serialization" in {issue.code for issue in issues}
+
+
+def test_rejects_composite_undeclared_transport_header() -> None:
+    plan_data = _minimal_plan_data()
+    request = _first_step(plan_data)["request"]
+    assert isinstance(request, dict)
+    request["headers"] = {"X-Metadata": {"source": "test"}}
+
+    issues = validate_plan_semantics(PlanModel.model_validate(plan_data), SPEC)
+
+    assert "unsupported_parameter_serialization" in {issue.code for issue in issues}
+
+
 def test_reports_false_and_undeclared_negative_intent() -> None:
     plan_data = deepcopy(load_test_plan(PLAN_DIR / "negative.yaml").model_dump(mode="json"))
     scenarios = plan_data["scenarios"]

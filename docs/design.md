@@ -91,7 +91,8 @@ does not claim exhaustive OpenAPI or JSON Schema support.
 - YAML and JSON documents.
 - OpenAPI 3.0.x and 3.1.x documents.
 - `GET`, `POST`, `PUT`, `PATCH`, and `DELETE` operations.
-- Path, query, and header parameters.
+- Path, query, and header parameters with scalar string, number, boolean, or
+  null values.
 - `application/json` request and response bodies.
 - Local `$ref` references, including adjacent Schema constraints in 3.1.
 - OpenAPI 3.0 `nullable` and OpenAPI 3.1 type arrays containing `null`.
@@ -117,6 +118,8 @@ does not claim exhaustive OpenAPI or JSON Schema support.
 - XML schemas and payloads.
 - Callbacks and webhooks.
 - Automated OAuth token acquisition.
+- Array or object path, query, and header values, including OpenAPI
+  `style`/`explode` serialization for composite parameters.
 
 Unsupported operation-level features must produce structured skip reasons.
 Unsupported document-wide dialects or invalid specifications produce explicit
@@ -577,6 +580,13 @@ The runner executes scenario steps in order using HTTPX. It supports scoped
 variables, response extraction, cleanup, request deadlines, and sanitized event
 logging. Runtime OpenAPI request and response validation is delegated to
 `openapi-core`; it is not reimplemented in the runner.
+
+The request builder resolves TestPlan variables before transport. It preserves
+query-parameter order and duplicate names, applies URI encoding to path values,
+and merges headers case-insensitively. Composite path, query, or header values
+produce `unsupported_parameter_serialization` during semantic validation when
+their value is statically known, and are rejected as `request_build_failed` if
+they can be known only at runtime.
 
 The runner classifies failures rather than returning a single generic error.
 Initial categories include:

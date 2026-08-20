@@ -25,6 +25,7 @@ from openapi_ai_test_evaluator.domain.test_plan import (
     ViolationCode,
 )
 from openapi_ai_test_evaluator.validation.schema_values import (
+    is_variable_reference,
     schema_at_pointer,
     validate_schema_value,
     variable_references,
@@ -65,12 +66,23 @@ def _step_variable_references(step: RequestStep) -> set[str]:
     return references
 
 
+def _statically_resolved_parameter_value(
+    value: Any,
+    plan_variables: dict[str, Any],
+) -> Any:
+    if not is_variable_reference(value):
+        return value
+    variable_name = value["$var"]
+    return plan_variables.get(variable_name)
+
+
 def _validate_parameter_collection(
     step: RequestStep,
     operation: OperationModel,
     spec: OpenAPISpec,
     path: str,
     default_headers: dict[str, str],
+    plan_variables: dict[str, Any],
 ) -> tuple[list[SemanticIssue], list[_DetectedViolation]]:
     issues: list[SemanticIssue] = []
     detected: list[_DetectedViolation] = []
@@ -90,12 +102,10 @@ def _validate_parameter_collection(
         for name, value in values:
             parameter = operation.parameter(location, name)
             parameter_path = f"{path}.request.{location.value}.{name}"
-            if parameter is None:
-                # OpenAPI parameter objects describe application-level headers.
-                # Plans may also provide normal HTTP transport headers such as
-                # Accept, Content-Type, Authorization, or tracing headers.
-                if location is ParameterLocation.HEADER:
-                    continue
+            # OpenAPI parameter objects describe application-level headers.
+            # Plans may also provide normal HTTP transport headers such as
+            # Accept, Content-Type, Authorization, or tracing headers.
+            if parameter is None and location is not ParameterLocation.HEADER:
                 issues.append(
                     _issue(
                         "unknown_parameter",
@@ -103,6 +113,23 @@ def _validate_parameter_collection(
                         f"{operation.operation_id} has no {location.value} parameter {name!r}",
                     )
                 )
+                continue
+
+            resolved_value = _statically_resolved_parameter_value(value, plan_variables)
+            if isinstance(resolved_value, (dict, list)):
+                issues.append(
+                    _issue(
+                        "unsupported_parameter_serialization",
+                        parameter_path,
+                        (
+                            f"{location.value} parameter {name!r} uses an array or object; "
+                            "V1 supports only scalar HTTP parameter values"
+                        ),
+                    )
+                )
+                continue
+
+            if parameter is None:
                 continue
             for violation in validate_schema_value(
                 value,
@@ -347,6 +374,7 @@ def _validate_step(
     path: str,
     available_variables: set[str],
     default_headers: dict[str, str],
+    plan_variables: dict[str, Any],
 ) -> tuple[list[SemanticIssue], OperationModel | None]:
     issues: list[SemanticIssue] = []
     missing_variables = _step_variable_references(step) - available_variables
@@ -374,7 +402,12 @@ def _validate_step(
         issues.append(_issue("unsupported_operation", path, f"{operation.operation_id}: {reason}"))
 
     parameter_issues, parameter_violations = _validate_parameter_collection(
-        step, operation, spec, path, default_headers
+        step,
+        operation,
+        spec,
+        path,
+        default_headers,
+        plan_variables,
     )
     body_issues, body_violations = _validate_request_body(step, operation, spec, path)
     issues.extend(parameter_issues)
@@ -849,6 +882,7 @@ def _validate_scenario(
                 path,
                 available_variables,
                 plan.defaults.headers,
+                plan.variables,
             )
             issues.extend(step_issues)
             if operation is not None and section_name != "cleanup":
