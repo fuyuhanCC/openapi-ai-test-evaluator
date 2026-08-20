@@ -273,16 +273,232 @@ Unknown operations, extractors, or assertion operators make a plan invalid.
 
 ### 8.4 `RunResult`
 
-`RunResult` records:
+`RunResult` is the complete raw execution record for one `TestPlan` run against
+one target and, optionally, one configured fault. It is a single object rather
+than an array. A result contains scenario results; each scenario contains its
+ordered step results and relation results.
 
-- Scenario and step identifiers.
-- Operation and fault identifiers.
-- Sanitized request and response summaries.
-- Duration and retry count.
-- Extracted variables.
-- Individual assertion outcomes.
-- Metamorphic relation outcomes.
-- A structured error category.
+The canonical artifact is JSON, but the following equivalent YAML illustrates
+the V1 contract:
+
+```yaml
+schema_version: "1.0"
+kind: RunResult
+
+run_id: run-20260820-001
+plan_name: lifecycle-scenarios
+spec_id: demo-items-v1
+
+started_at: "2026-08-20T10:00:00.000+08:00"
+finished_at: "2026-08-20T10:00:00.184+08:00"
+duration_ms: 184
+outcome: passed
+
+fault:
+  configured_fault_id: null
+  trigger_status: not_configured
+  trigger_count: 0
+
+scenarios:
+  - scenario_id: create-read
+    outcome: passed
+
+    steps:
+      - phase: main
+        step_id: create
+        operation_id: createItem
+        outcome_policy: required
+        outcome: passed
+        duration_ms: 82
+        retry_count: 0
+
+        request:
+          method: POST
+          path: /items
+          query: []
+          headers:
+            content-type: application/json
+          body:
+            media_type: application/json
+            value:
+              name: Created Item
+              price: 10.0
+              status: active
+            size_bytes: 61
+            truncated: false
+
+        response:
+          status_code: 201
+          headers:
+            content-type: application/json
+          body:
+            media_type: application/json
+            value:
+              id: item-123
+              name: Created Item
+              price: 10.0
+              status: active
+            size_bytes: 79
+            truncated: false
+
+        extractions:
+          - variable: item_id
+            source: response.body
+            pointer: /id
+            required: true
+            status: extracted
+            value: item-123
+            redacted: false
+
+        assertions:
+          - assertion_id: assertion-1
+            operator: status_is
+            outcome: passed
+            actual: 201
+            expected: 201
+            message: null
+            issues: []
+          - assertion_id: assertion-2
+            operator: schema_matches
+            outcome: passed
+            actual: null
+            expected: null
+            message: null
+            issues: []
+
+        errors: []
+
+      - phase: main
+        step_id: read-created
+        operation_id: getItem
+        outcome_policy: required
+        outcome: passed
+        duration_ms: 67
+        retry_count: 0
+
+        request:
+          method: GET
+          path: /items/item-123
+          query: []
+          headers: {}
+          body:
+            media_type: null
+            value: null
+            size_bytes: 0
+            truncated: false
+
+        response:
+          status_code: 200
+          headers:
+            content-type: application/json
+          body:
+            media_type: application/json
+            value:
+              id: item-123
+              name: Created Item
+              price: 10.0
+              status: active
+            size_bytes: 79
+            truncated: false
+
+        extractions: []
+        assertions:
+          - assertion_id: assertion-1
+            operator: status_is
+            outcome: passed
+            actual: 200
+            expected: 200
+            message: null
+            issues: []
+          - assertion_id: assertion-2
+            operator: equals
+            outcome: passed
+            actual: Created Item
+            expected: Created Item
+            message: null
+            issues: []
+        errors: []
+
+    relations:
+      - relation_id: created-fields-readable
+        kind: lifecycle
+        type: create_read_consistency
+        source_step: create
+        follow_up_step: read-created
+        baseline_step: null
+        outcome: passed
+
+        comparisons:
+          - comparison_id: comparison-1
+            operator: equals
+            outcome: passed
+            source:
+              step_id: create
+              location: request.body
+              pointer: /name
+              value: Created Item
+            follow_up:
+              step_id: read-created
+              location: response.body
+              pointer: /name
+              value: Created Item
+            expected: null
+            message: null
+
+        errors: []
+
+    errors: []
+
+errors: []
+```
+
+The result enums are deliberately finite:
+
+- Run, scenario, and step outcomes are `passed`, `failed`, `error`, or
+  `skipped`.
+- Assertion outcomes are `passed`, `failed`, `error`, or `skipped`.
+- Relation outcomes additionally support `not_applicable`.
+- Extraction statuses are `extracted`, `missing`, `error`, or `skipped`.
+- Step phases are `setup`, `main`, or `cleanup`.
+- Outcome policies are `required` or `best_effort`. `best_effort` is valid only
+  for cleanup steps whose TestPlan definition sets `ignore_errors: true`.
+- Fault trigger statuses are `not_configured`, `triggered`, `not_triggered`, or
+  `unknown`.
+- Relation comparison operators are `equals`, `set_equals`, `subset`, `prefix`,
+  `one_of`, or `unchanged`.
+
+The request snapshot contains the fully resolved request after variable
+substitution. Query parameters remain an ordered list so repeated names and
+parameter-order tests are representable. A response is `null` only if no HTTP
+response was received. Assertions and OpenAPI validation always operate on the
+original in-memory response before the stored snapshot is redacted or
+truncated.
+
+An extraction records the safe artifact value separately from the in-memory
+runtime value. A sensitive value may therefore appear as `[REDACTED]` in the
+result while remaining usable by later steps. A missing required extraction
+fails its step; a missing optional extraction is recorded without failing the
+step.
+
+Structured errors have a stable category, location, optional JSON Pointer,
+human-readable message, and an optional list of `name`/`value` evidence
+records. An error is stored only at the nearest owning level and is not copied
+into its parent. Parent objects propagate outcomes instead. Assertion or
+relation failures produce `failed`; failures to obtain a deterministic verdict,
+such as a timeout, produce `error`.
+
+The following invariants apply:
+
+- Finish time cannot precede start time.
+- Durations, retry counts, and trigger counts cannot be negative.
+- V1 performs no automatic HTTP retries, so `retry_count` is always zero.
+- `not_configured` requires a null `configured_fault_id`; `triggered` and
+  `not_triggered` require a non-null identifier.
+- Fault detection is not a `RunResult` field. `EvaluationResult` derives it by
+  comparing the clean and faulty runs after confirming that the configured
+  fault triggered.
+- All request, response, extraction, evidence, and diagnostic values are
+  sanitized before serialization.
 
 ### 8.5 `EvaluationResult`
 
@@ -376,6 +592,8 @@ Initial categories include:
 - `metamorphic_relation_violated`
 - `lifecycle_consistency_violated`
 - `sut_unavailable`
+- `response_too_large`
+- `runner_internal_error`
 
 An LLM response is never consulted by the runner after generation.
 
