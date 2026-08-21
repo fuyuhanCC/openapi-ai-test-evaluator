@@ -581,12 +581,55 @@ variables, response extraction, cleanup, request deadlines, and sanitized event
 logging. Runtime OpenAPI request and response validation is delegated to
 `openapi-core`; it is not reimplemented in the runner.
 
+The execution path is deliberately split into small deterministic boundaries:
+
+```mermaid
+flowchart LR
+    step["Validated RequestStep"] --> builder["Request builder"]
+    builder --> prepared["PreparedRequest"]
+    prepared --> request_contract["openapi-core request validation"]
+    prepared --> transport["Bounded HTTPX transport"]
+    transport --> raw["TransportResponse"]
+    raw --> processor["Response processor"]
+    processor --> response_contract["openapi-core response validation"]
+    processor --> parser["Response parser"]
+    response_contract --> assertions["Assertions and extractions"]
+    parser --> assertions
+    raw --> snapshots["Sanitized snapshots"]
+```
+
 The request builder resolves TestPlan variables before transport. It preserves
 query-parameter order and duplicate names, applies URI encoding to path values,
-and merges headers case-insensitively. Composite path, query, or header values
-produce `unsupported_parameter_serialization` during semantic validation when
-their value is statically known, and are rejected as `request_build_failed` if
-they can be known only at runtime.
+and merges headers case-insensitively. It retains both the encoded request path
+and the unencoded path-parameter values required by runtime contract validation.
+Composite path, query, or header values produce
+`unsupported_parameter_serialization` during semantic validation when their
+value is statically known, and are rejected as `request_build_failed` if they
+can be known only at runtime.
+
+The transport sends a prepared request exactly once, does not follow redirects,
+and does not retry. It applies the step deadline and reads the response through
+a configurable byte limit before returning raw status, headers, body bytes, and
+duration. Timeouts, connection failures, other HTTP transport failures, and
+oversized responses remain distinct failure categories.
+
+Thin protocol adapters expose `PreparedRequest` and `TransportResponse` through
+the interfaces required by `openapi-core`. Query parameters use a multi-value
+mapping so duplicate names survive validation, and request and response bodies
+remain raw bytes at the library boundary. Runtime operation lookup intentionally
+uses the HTTP method and OpenAPI path rather than requiring the target URL to
+match the document's `servers` entries: benchmark traffic may pass through a
+Docker address or fault proxy. Target authorization remains the independent
+responsibility of the runner's host allowlist.
+
+The response processor retains the raw response, all `openapi-core` contract
+issues, and either parsed response data or a parsing issue. The parser
+distinguishes empty, JSON, text, and binary bodies from the declared media type.
+If valid JSON violates its response Schema, the parsed value remains available
+to field assertions and diagnostic reporting. If JSON syntax is invalid, status
+and headers remain available while body-dependent assertions and extractions
+receive a parsing issue. Assertions and OpenAPI validation always run before
+artifact snapshots are sanitized.
 
 The runner classifies failures rather than returning a single generic error.
 Initial categories include:

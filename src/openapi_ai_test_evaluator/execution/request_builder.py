@@ -31,6 +31,7 @@ class PreparedRequest:
     operation_id: str
     method: str
     path: str
+    path_parameters: tuple[tuple[str, str], ...]
     query: tuple[tuple[str, str], ...]
     headers: Mapping[str, str]
     json_body: JsonValue | None
@@ -52,7 +53,7 @@ def build_request(
         name: _resolve_runtime_value(value, variables, f"request.path.{name}")
         for name, value in step.request.path.items()
     }
-    path = _render_path(operation, path_values)
+    path, path_parameters = _render_path(operation, path_values)
 
     query = tuple(
         (
@@ -89,6 +90,7 @@ def build_request(
         operation_id=operation.operation_id,
         method=operation.method.upper(),
         path=path,
+        path_parameters=path_parameters,
         query=query,
         headers=headers,
         json_body=body,
@@ -119,20 +121,26 @@ def _resolve_runtime_value(
     return value
 
 
-def _render_path(operation: OperationModel, values: Mapping[str, JsonValue]) -> str:
+def _render_path(
+    operation: OperationModel,
+    values: Mapping[str, JsonValue],
+) -> tuple[str, tuple[tuple[str, str], ...]]:
     path = operation.path
-    declared_names = set(_PATH_PARAMETER.findall(path))
-    if missing := declared_names - values.keys():
+    declared_names = tuple(dict.fromkeys(_PATH_PARAMETER.findall(path)))
+    declared_name_set = set(declared_names)
+    if missing := declared_name_set - values.keys():
         missing_list = ", ".join(sorted(missing))
         raise RequestBuildError("request.path", f"missing path parameters: {missing_list}")
-    if extra := values.keys() - declared_names:
+    if extra := values.keys() - declared_name_set:
         extra_list = ", ".join(sorted(extra))
         raise RequestBuildError("request.path", f"unknown path parameters: {extra_list}")
 
+    serialized_parameters: list[tuple[str, str]] = []
     for name in declared_names:
         serialized = _serialize_parameter(values[name], f"request.path.{name}")
+        serialized_parameters.append((name, serialized))
         path = path.replace(f"{{{name}}}", quote(serialized, safe=""))
-    return path
+    return path, tuple(serialized_parameters)
 
 
 def _serialize_parameter(value: JsonValue, location: str) -> str:

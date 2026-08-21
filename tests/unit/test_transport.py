@@ -16,6 +16,7 @@ def prepared_request(**changes: object) -> PreparedRequest:
         "operation_id": "createItem",
         "method": "POST",
         "path": "/items",
+        "path_parameters": (),
         "query": (("tag", "first"), ("tag", "second")),
         "headers": {"X-Test": "transport"},
         "json_body": {"name": "Created Item"},

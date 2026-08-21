@@ -4,10 +4,11 @@ An experimental framework for generating declarative API tests from OpenAPI
 documents and evaluating their fault-detection capability with deterministic
 oracles.
 
-> **Current status:** the V1 design, TestPlan contract, OpenAPI 3.0/3.1
-> common-subset loader, and plan-to-spec semantic validation are implemented.
-> HTTP execution, DeepSeek integration, PetClinic, and fault injection are
-> planned next.
+> **Current status:** the V1 contracts, OpenAPI 3.0/3.1 common-subset loader,
+> plan-to-spec semantic validation, and core HTTP execution pipeline are
+> implemented. Scenario orchestration, declarative assertions and extractions,
+> DeepSeek integration, PetClinic, and fault injection are planned next. There
+> is not yet an `oate run` command.
 
 ## What works today
 
@@ -18,6 +19,14 @@ oracles.
   checking, with project-specific error mapping for TestPlan semantics.
 - Structural TestPlan validation plus plan-to-OpenAPI semantic validation.
 - Positive, negative, stateful, and metamorphic TestPlan examples.
+- Strict RunResult contracts for requests, responses, assertions, extractions,
+  relations, faults, and structured errors.
+- Deterministic request building and bounded HTTPX transport without retries or
+  redirect following.
+- Runtime request and response contract validation delegated to `openapi-core`,
+  including OpenAPI 3.0 and 3.1 fixtures.
+- Response parsing, partial-evidence preservation, and sanitized request and
+  response snapshots.
 - Generated JSON Schema for external tools and structured model output.
 - A CLI for validating plans independently or against an OpenAPI document.
 - Unit tests for valid and invalid contract behavior.

@@ -31,6 +31,7 @@ def test_builds_request_from_operation_and_plan_values() -> None:
     assert request.operation_id == "createItem"
     assert request.method == "POST"
     assert request.path == "/items"
+    assert request.path_parameters == ()
     assert request.query == ()
     assert request.json_body == {
         "name": "Test Item",
@@ -49,6 +50,7 @@ def test_resolves_and_url_encodes_path_variable() -> None:
     )
 
     assert request.path == "/items/folder%2Fitem%201"
+    assert request.path_parameters == (("itemId", "folder/item 1"),)
 
 
 def test_preserves_query_parameter_order_and_duplicates() -> None:
