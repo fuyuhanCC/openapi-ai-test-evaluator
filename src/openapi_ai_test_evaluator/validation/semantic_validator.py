@@ -63,6 +63,8 @@ def _step_variable_references(step: RequestStep) -> set[str]:
         references.update(variable_references(parameter.value))
     for value in request.headers.values():
         references.update(variable_references(value))
+    for assertion in step.assertions:
+        references.update(variable_references(assertion.expected))
     return references
 
 

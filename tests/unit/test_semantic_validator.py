@@ -177,6 +177,23 @@ def test_reports_unknown_runtime_variable() -> None:
     assert "unknown_variable" in {issue.code for issue in issues}
 
 
+def test_reports_unknown_runtime_variable_in_assertion_expected_value() -> None:
+    plan_data = _minimal_plan_data()
+    assertions = _first_step(plan_data)["assertions"]
+    assert isinstance(assertions, list)
+    assertions.append(
+        {
+            "operator": "equals",
+            "actual": {"source": "response.body", "pointer": "/id"},
+            "expected": {"$var": "never_defined"},
+        }
+    )
+
+    issues = validate_plan_semantics(PlanModel.model_validate(plan_data), SPEC)
+
+    assert "unknown_variable" in {issue.code for issue in issues}
+
+
 def test_rejects_composite_http_parameter_value() -> None:
     plan_data = _minimal_plan_data()
     request = _first_step(plan_data)["request"]

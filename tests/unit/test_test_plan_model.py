@@ -5,6 +5,7 @@ from openapi_ai_test_evaluator.domain import TestPlan as PlanModel
 from openapi_ai_test_evaluator.domain.test_plan import (
     LIFECYCLE_RELATION_TYPES,
     METAMORPHIC_RELATION_TYPES,
+    Assertion,
     RelationKind,
     RelationType,
 )
@@ -74,3 +75,64 @@ def test_relation_types_have_disjoint_explicit_kinds() -> None:
     assert METAMORPHIC_RELATION_TYPES | LIFECYCLE_RELATION_TYPES == set(RelationType)
     assert RelationType.QUERY_ORDER.kind is RelationKind.METAMORPHIC
     assert RelationType.CREATE_READ.kind is RelationKind.LIFECYCLE
+
+
+def test_distinguishes_explicit_json_null_from_missing_expected_value() -> None:
+    assertion = Assertion.model_validate(
+        {
+            "operator": "equals",
+            "actual": {"source": "response.body", "pointer": "/optional"},
+            "expected": None,
+        }
+    )
+
+    assert assertion.expected is None
+
+    with pytest.raises(ValidationError, match="requires actual and expected"):
+        Assertion.model_validate(
+            {
+                "operator": "equals",
+                "actual": {"source": "response.body", "pointer": "/optional"},
+            }
+        )
+
+
+def test_enforces_selector_pointer_by_response_source() -> None:
+    with pytest.raises(ValidationError, match="response.headers selectors require"):
+        Assertion.model_validate(
+            {
+                "operator": "exists",
+                "actual": {"source": "response.headers"},
+            }
+        )
+
+    with pytest.raises(ValidationError, match="response.status selectors cannot"):
+        Assertion.model_validate(
+            {
+                "operator": "exists",
+                "actual": {"source": "response.status", "pointer": "/code"},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("operator", "expected", "message"),
+    [
+        ("length_is", -1, "non-negative integer"),
+        ("greater_than", True, "numeric expected"),
+        ("matches_pattern", "[", "valid regular expression"),
+    ],
+)
+def test_rejects_invalid_operator_specific_expected_values(
+    operator: str,
+    expected: object,
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Assertion.model_validate(
+            {
+                "operator": operator,
+                "actual": {"source": "response.body", "pointer": ""},
+                "expected": expected,
+            }
+        )

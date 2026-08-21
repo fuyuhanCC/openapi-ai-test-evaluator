@@ -55,7 +55,7 @@ def build_request_snapshot(request: PreparedRequest) -> RequestSnapshot:
     else:
         body = BodySnapshot(
             media_type=media_type,
-            value=_sanitize_json(request.json_body),
+            value=sanitize_json_value(request.json_body),
             size_bytes=len(_canonical_json_bytes(request.json_body)),
             truncated=False,
         )
@@ -70,7 +70,7 @@ def build_request_snapshot(request: PreparedRequest) -> RequestSnapshot:
         query=[
             QueryParameterSnapshot(
                 name=name,
-                value=REDACTED_VALUE if _is_sensitive_name(name) else value,
+                value=REDACTED_VALUE if is_sensitive_name(name) else value,
             )
             for name, value in request.query
         ],
@@ -88,7 +88,7 @@ def build_response_snapshot(response: TransportResponse) -> ResponseSnapshot:
         headers=_sanitize_headers(response.headers),
         body=BodySnapshot(
             media_type=media_type,
-            value=_sanitize_json(value),
+            value=sanitize_json_value(value),
             size_bytes=len(response.body),
             truncated=False,
         ),
@@ -140,7 +140,7 @@ def _sanitize_headers(headers: Iterable[tuple[str, str]]) -> dict[str, str]:
     sanitized: dict[str, str] = {}
     for name, value in headers:
         normalized_name = name.casefold()
-        safe_value = REDACTED_VALUE if _is_sensitive_name(name) else value
+        safe_value = REDACTED_VALUE if is_sensitive_name(name) else value
         if normalized_name in sanitized and sanitized[normalized_name] != safe_value:
             sanitized[normalized_name] = f"{sanitized[normalized_name]}, {safe_value}"
         else:
@@ -148,17 +148,19 @@ def _sanitize_headers(headers: Iterable[tuple[str, str]]) -> dict[str, str]:
     return sanitized
 
 
-def _sanitize_json(value: JsonValue) -> JsonValue:
+def sanitize_json_value(value: JsonValue) -> JsonValue:
+    """Recursively redact values stored under known sensitive field names."""
     if isinstance(value, dict):
         return {
-            key: REDACTED_VALUE if _is_sensitive_name(key) else _sanitize_json(nested)
+            key: REDACTED_VALUE if is_sensitive_name(key) else sanitize_json_value(nested)
             for key, nested in value.items()
         }
     if isinstance(value, list):
-        return [_sanitize_json(nested) for nested in value]
+        return [sanitize_json_value(nested) for nested in value]
     return value
 
 
-def _is_sensitive_name(name: str) -> bool:
+def is_sensitive_name(name: str) -> bool:
+    """Return whether a header, parameter, or JSON field name is sensitive."""
     normalized = re.sub(r"[^a-z0-9]", "", name.casefold())
     return normalized in _SENSITIVE_NAMES

@@ -260,7 +260,7 @@ Setup, primary, and cleanup steps share the same request contract. Cleanup steps
 declare when they run and whether cleanup errors are best-effort, allowing the
 runner to isolate state even when a primary step fails.
 
-V1 assertions are limited to operators such as:
+V1 assertions are limited to these operators:
 
 - `status_is`
 - `schema_matches`
@@ -271,6 +271,18 @@ V1 assertions are limited to operators such as:
 - `length_is`
 - `greater_than`
 - `matches_pattern`
+
+`status_is` reads the raw response status, while `schema_matches` reuses the
+runtime `openapi-core` result rather than invoking a second Schema validator.
+Other operators select a response body or header value with JSON Pointer syntax.
+Header names are matched case-insensitively. An explicitly declared
+`expected: null` is distinct from an omitted expected value, and expected values
+may contain the same declarative `$var` references used by requests.
+
+`contains` supports substring membership, array membership, object-key
+membership, and partial-object matching inside arrays. This lets a stateful
+scenario verify that a collection contains the resource identifier extracted
+from an earlier response without copying every returned field into the plan.
 
 Unknown operations, extractors, or assertion operators make a plan invalid.
 
@@ -630,6 +642,17 @@ to field assertions and diagnostic reporting. If JSON syntax is invalid, status
 and headers remain available while body-dependent assertions and extractions
 receive a parsing issue. Assertions and OpenAPI validation always run before
 artifact snapshots are sanitized.
+
+The assertion executor interprets only the finite TestPlan operator set; it does
+not evaluate generated code or expressions. It resolves selectors against the
+processed response, substitutes previously available `$var` values, and emits
+one `AssertionResult` per declaration in plan order. A successfully evaluated
+but false predicate produces `failed`. A missing runtime variable, unavailable
+body, invalid dynamic pattern, or unsupported runtime type produces `error`
+because no deterministic verdict could be reached. Missing selected values fail
+ordinary predicates instead of allowing `not_equals` to pass accidentally.
+Assertion evidence is compared in memory first and sanitized before entering
+the stored result; sensitive header and JSON field names are redacted.
 
 The runner classifies failures rather than returning a single generic error.
 Initial categories include:

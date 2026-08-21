@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 from typing import Annotated, Literal, Self
 
@@ -199,9 +200,11 @@ class ResponseSelector(ContractModel):
     pointer: JsonPointer | None = None
 
     @model_validator(mode="after")
-    def require_pointer_for_body(self) -> Self:
-        if self.source == "response.body" and self.pointer is None:
-            raise ValueError("response.body selectors require a JSON pointer")
+    def validate_pointer(self) -> Self:
+        if self.source in {"response.body", "response.headers"} and self.pointer is None:
+            raise ValueError(f"{self.source} selectors require a JSON pointer")
+        if self.source == "response.status" and self.pointer is not None:
+            raise ValueError("response.status selectors cannot have a JSON pointer")
         return self
 
 
@@ -227,8 +230,15 @@ class Assertion(ContractModel):
 
     @model_validator(mode="after")
     def validate_operator_arguments(self) -> Self:
+        expected_provided = "expected" in self.model_fields_set
         if self.operator is AssertionOperator.STATUS_IS:
-            if not isinstance(self.expected, int) or isinstance(self.expected, bool):
+            if self.actual is not None:
+                raise ValueError("status_is does not accept an actual selector")
+            if (
+                not expected_provided
+                or not isinstance(self.expected, int)
+                or isinstance(self.expected, bool)
+            ):
                 raise ValueError("status_is requires an integer expected value")
         elif self.operator is AssertionOperator.SCHEMA_MATCHES:
             if self.actual is not None or self.expected is not None:
@@ -236,8 +246,33 @@ class Assertion(ContractModel):
         elif self.operator is AssertionOperator.EXISTS:
             if self.actual is None:
                 raise ValueError("exists requires an actual selector")
-        elif self.actual is None or self.expected is None:
-            raise ValueError(f"{self.operator.value} requires actual and expected")
+            if self.expected is not None:
+                raise ValueError("exists does not accept an expected value")
+        else:
+            if self.actual is None or not expected_provided:
+                raise ValueError(f"{self.operator.value} requires actual and expected")
+            expected_is_reference = isinstance(self.expected, dict) and set(self.expected) == {
+                "$var"
+            }
+            if self.operator is AssertionOperator.LENGTH_IS and not expected_is_reference:
+                if (
+                    not isinstance(self.expected, int)
+                    or isinstance(self.expected, bool)
+                    or self.expected < 0
+                ):
+                    raise ValueError("length_is requires a non-negative integer expected value")
+            if self.operator is AssertionOperator.GREATER_THAN and not expected_is_reference:
+                if not isinstance(self.expected, (int, float)) or isinstance(self.expected, bool):
+                    raise ValueError("greater_than requires a numeric expected value")
+            if self.operator is AssertionOperator.MATCHES_PATTERN and not expected_is_reference:
+                if not isinstance(self.expected, str):
+                    raise ValueError("matches_pattern requires a string expected value")
+                try:
+                    re.compile(self.expected)
+                except re.error as error:
+                    raise ValueError(
+                        "matches_pattern requires a valid regular expression"
+                    ) from error
         return self
 
 

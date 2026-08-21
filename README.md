@@ -6,9 +6,9 @@ oracles.
 
 > **Current status:** the V1 contracts, OpenAPI 3.0/3.1 common-subset loader,
 > plan-to-spec semantic validation, and core HTTP execution pipeline are
-> implemented. Scenario orchestration, declarative assertions and extractions,
-> DeepSeek integration, PetClinic, and fault injection are planned next. There
-> is not yet an `oate run` command.
+> implemented. Deterministic declarative assertions are also implemented;
+> scenario orchestration, response extraction, DeepSeek integration, PetClinic,
+> and fault injection are planned next. There is not yet an `oate run` command.
 
 ## What works today
 
@@ -27,6 +27,8 @@ oracles.
   including OpenAPI 3.0 and 3.1 fixtures.
 - Response parsing, partial-evidence preservation, and sanitized request and
   response snapshots.
+- Deterministic allowlisted assertions over response status, headers, and JSON
+  values, with runtime variable resolution and sanitized result evidence.
 - Generated JSON Schema for external tools and structured model output.
 - A CLI for validating plans independently or against an OpenAPI document.
 - Unit tests for valid and invalid contract behavior.
