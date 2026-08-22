@@ -13,11 +13,8 @@ from pydantic import JsonValue
 from openapi_ai_test_evaluator.domain.execution import (
     ComparisonOperator,
     ErrorCategory,
-    ExecutionOutcome,
     RelationComparisonResult,
-    RelationOutcome,
     RelationResult,
-    StructuredError,
 )
 from openapi_ai_test_evaluator.domain.test_plan import (
     PaginationMode,
@@ -25,6 +22,13 @@ from openapi_ai_test_evaluator.domain.test_plan import (
     RelationKind,
     RelationType,
     ScenarioRelation,
+)
+from openapi_ai_test_evaluator.execution.relation_results import (
+    build_evaluated_relation_result,
+    build_not_applicable_relation_result,
+    build_relation_comparison,
+    build_relation_error_result,
+    json_values_equal,
 )
 from openapi_ai_test_evaluator.execution.relation_values import (
     RelationValueSelectionError,
@@ -66,13 +70,16 @@ def execute_metamorphic_relation(
     source = executions.get(relation.source_step)
     follow_up = executions.get(relation.follow_up_step)
     if source is None or follow_up is None:
-        return _not_applicable(relation, "referenced steps did not both execute")
+        return build_not_applicable_relation_result(
+            relation,
+            "referenced steps did not both execute",
+        )
     if source.prepared_request is None or follow_up.prepared_request is None:
         return _error_result(relation, "a referenced request was not prepared")
 
     applicability_reason = _applicability_failure(relation, source, follow_up)
     if applicability_reason is not None:
-        return _not_applicable(relation, applicability_reason)
+        return build_not_applicable_relation_result(relation, applicability_reason)
 
     if relation.type is RelationType.REPEATED_READ:
         return _execute_repeated_read(relation, source, follow_up)
@@ -182,9 +189,9 @@ def _execute_repeated_read(
             )
             if normalized_source is _IGNORED or normalized_follow is _IGNORED:
                 continue
-            passed = _json_equal(normalized_source, normalized_follow)
+            passed = json_values_equal(normalized_source, normalized_follow)
             comparisons.append(
-                _comparison(
+                build_relation_comparison(
                     len(comparisons) + 1,
                     ComparisonOperator.EQUALS,
                     source_value,
@@ -230,7 +237,7 @@ def _execute_query_order(
     except (RelationValueSelectionError, ResponseSelectionError) as error:
         return _error_result(relation, str(error))
 
-    comparison = _comparison(
+    comparison = build_relation_comparison(
         1,
         ComparisonOperator.SET_EQUALS,
         source_collection,
@@ -279,7 +286,7 @@ def _execute_pagination(
         passed = source_keys == follow_keys[: len(source_keys)]
         failure_message = "source page item keys are not a prefix of the larger page"
 
-    comparison = _comparison(
+    comparison = build_relation_comparison(
         1,
         operator,
         source_collection,
@@ -393,80 +400,16 @@ def _array_index(token: str) -> int | None:
     return int(token)
 
 
-def _json_equal(left: object, right: object) -> bool:
-    if left is _IGNORED or right is _IGNORED:
-        return left is right
-    if isinstance(left, bool) or isinstance(right, bool):
-        return type(left) is type(right) and left == right
-    if _is_number(left) and _is_number(right):
-        return left == right
-    if isinstance(left, list) and isinstance(right, list):
-        return len(left) == len(right) and all(
-            _json_equal(left_item, right_item)
-            for left_item, right_item in zip(left, right, strict=True)
-        )
-    if isinstance(left, dict) and isinstance(right, dict):
-        return left.keys() == right.keys() and all(
-            _json_equal(left[key], right[key]) for key in left
-        )
-    return type(left) is type(right) and left == right
-
-
-def _is_number(value: object) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
-def _comparison(
-    index: int,
-    operator: ComparisonOperator,
-    source: SelectedRelationValue,
-    follow_up: SelectedRelationValue,
-    passed: bool,
-    message: str | None,
-) -> RelationComparisonResult:
-    return RelationComparisonResult(
-        comparison_id=f"comparison-{index}",
-        operator=operator,
-        outcome=ExecutionOutcome.PASSED if passed else ExecutionOutcome.FAILED,
-        source=source.snapshot,
-        follow_up=follow_up.snapshot,
-        expected=None,
-        message=message,
-    )
-
-
 def _evaluated_result(
     relation: ScenarioRelation,
     comparisons: list[RelationComparisonResult],
     failure_message: str,
 ) -> RelationResult:
-    failed = any(comparison.outcome is ExecutionOutcome.FAILED for comparison in comparisons)
-    return RelationResult(
-        relation_id=relation.id,
-        kind=relation.kind,
-        type=relation.type,
-        source_step=relation.source_step,
-        follow_up_step=relation.follow_up_step,
-        baseline_step=None,
-        outcome=RelationOutcome.FAILED if failed else RelationOutcome.PASSED,
-        message=failure_message if failed else None,
-        comparisons=comparisons,
-        errors=([_relation_error(relation, failure_message)] if failed else []),
-    )
-
-
-def _not_applicable(relation: ScenarioRelation, message: str) -> RelationResult:
-    return RelationResult(
-        relation_id=relation.id,
-        kind=relation.kind,
-        type=relation.type,
-        source_step=relation.source_step,
-        follow_up_step=relation.follow_up_step,
-        baseline_step=None,
-        outcome=RelationOutcome.NOT_APPLICABLE,
-        message=message,
-        comparisons=[],
-        errors=[],
+    return build_evaluated_relation_result(
+        relation,
+        comparisons,
+        failure_message,
+        ErrorCategory.METAMORPHIC_RELATION_VIOLATED,
     )
 
 
@@ -476,30 +419,9 @@ def _error_result(
     *,
     comparisons: list[RelationComparisonResult] | None = None,
 ) -> RelationResult:
-    return RelationResult(
-        relation_id=relation.id,
-        kind=relation.kind,
-        type=relation.type,
-        source_step=relation.source_step,
-        follow_up_step=relation.follow_up_step,
-        baseline_step=None,
-        outcome=RelationOutcome.ERROR,
-        message=message,
-        comparisons=comparisons or [],
-        errors=[_relation_error(relation, message)],
-    )
-
-
-def _relation_error(
-    relation: ScenarioRelation,
-    message: str,
-) -> StructuredError:
-    return StructuredError(
-        error_id="error-1",
-        category=ErrorCategory.METAMORPHIC_RELATION_VIOLATED,
-        location=f"relations.{relation.id}",
-        pointer=None,
-        assertion_id=None,
-        message=message,
-        evidence=[],
+    return build_relation_error_result(
+        relation,
+        message,
+        ErrorCategory.METAMORPHIC_RELATION_VIOLATED,
+        comparisons=comparisons,
     )

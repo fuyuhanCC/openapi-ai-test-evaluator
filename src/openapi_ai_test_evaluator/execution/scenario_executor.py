@@ -15,10 +15,10 @@ from openapi_ai_test_evaluator.domain.execution import (
 )
 from openapi_ai_test_evaluator.domain.openapi import OpenAPISpec
 from openapi_ai_test_evaluator.domain.test_plan import CleanupWhen, PlanDefaults, Scenario
-from openapi_ai_test_evaluator.execution.metamorphic_relations import (
-    execute_metamorphic_relations,
-)
 from openapi_ai_test_evaluator.execution.openapi_validation import OpenAPIContractValidator
+from openapi_ai_test_evaluator.execution.scenario_relations import (
+    execute_scenario_relations,
+)
 from openapi_ai_test_evaluator.execution.step_executor import (
     StepExecution,
     execute_step,
@@ -47,7 +47,7 @@ class ScenarioFlowExecution:
     """Completed setup, main, relation, and cleanup execution for one scenario."""
 
     main: ScenarioMainExecution
-    metamorphic_results: tuple[RelationResult, ...]
+    relation_results: tuple[RelationResult, ...]
     cleanup_executions: tuple[StepExecution, ...]
     variables: Mapping[str, JsonValue] = field(repr=False)
 
@@ -109,7 +109,7 @@ def execute_scenario_flow(
         validator,
         transport,
     )
-    metamorphic_results = execute_metamorphic_relations(
+    relation_results = execute_scenario_relations(
         scenario.relations,
         main.step_executions,
     )
@@ -134,7 +134,7 @@ def execute_scenario_flow(
 
     return ScenarioFlowExecution(
         main=main,
-        metamorphic_results=metamorphic_results,
+        relation_results=relation_results,
         cleanup_executions=tuple(cleanup_executions),
         variables=MappingProxyType(dict(variables)),
     )

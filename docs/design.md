@@ -692,8 +692,8 @@ and the step that caused the halt; it is not exposed as a complete
 and exchange objects are excluded from dataclass representations to reduce
 accidental disclosure through diagnostic logging.
 
-Declared metamorphic relations are evaluated after setup/main execution and
-before cleanup can mutate or delete the observed resources. The runtime engine
+Declared scenario relations are evaluated after setup/main execution and before
+cleanup can mutate or delete the observed resources. The runtime engine
 first rechecks that the resolved requests actually satisfy the transformation
 assumed by the relation. A failed precondition is recorded as `not_applicable`;
 a false response comparison is `failed`; and an unavailable or structurally
@@ -709,7 +709,7 @@ values remain available to later cleanup steps. A normal cleanup uses the
 `required` outcome policy; `ignore_errors: true` records `best_effort`. Both
 retain their own actual step outcome, while the eventual scenario aggregator
 will exclude only best-effort failures from its parent outcome. The combined
-main execution, metamorphic results, and cleanup executions are retained in
+main execution, relation results, and cleanup executions are retained in
 `ScenarioFlowExecution` before aggregation into a final `ScenarioResult`.
 
 The runner classifies failures rather than returning a single generic error.
@@ -787,21 +787,31 @@ The following checks validate stateful API workflows. They are scenario
 relations, but they are not classified as metamorphic testing because they do
 not derive a follow-up test through the same input-transformation principle.
 
+The runtime evaluator rechecks the concrete resource link after variable
+resolution. A create-read follow-up path must contain a value actually extracted
+by the create step; update-read and delete-read source/follow-up paths must
+resolve to the same resource. Declared field pairs use JSON value equality and
+the same sanitized comparison artifacts as metamorphic relations.
+
 #### Create-read consistency
 
 Create a resource, extract its identifier, and read it back. Fields accepted in
 the create request must agree with the corresponding retrievable fields, subject
-to documented server normalization.
+to documented server normalization. Each declared source/follow-up field pair
+produces one `equals` comparison.
 
 #### Update-read consistency
 
 Update selected fields and read the resource again. Updated fields must reflect
 the new values, while configured untouched stable fields remain unchanged.
+Stable fields compare the declared baseline response to the follow-up response
+with the `unchanged` operator.
 
 #### Delete-read consistency
 
-Delete a resource and attempt to retrieve it again. The resource must be absent
-or the API must return one of the documented not-found outcomes.
+Delete a resource and attempt to retrieve it again. The delete response must
+first be successful (2xx); the follow-up status is then recorded with a `one_of`
+comparison against the explicitly accepted not-found outcomes.
 
 Checks that require unsupported endpoint behavior, such as pagination on an API
 without pagination, are excluded from that benchmark's denominator.

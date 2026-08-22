@@ -6,6 +6,10 @@ from openapi_ai_test_evaluator.execution.extractions import (
     ExtractionIssue,
     execute_extractions,
 )
+from openapi_ai_test_evaluator.execution.lifecycle_relations import (
+    execute_lifecycle_relation,
+    execute_lifecycle_relations,
+)
 from openapi_ai_test_evaluator.execution.metamorphic_relations import (
     execute_metamorphic_relation,
     execute_metamorphic_relations,
@@ -47,6 +51,10 @@ from openapi_ai_test_evaluator.execution.scenario_executor import (
     ScenarioMainExecution,
     execute_scenario_flow,
     execute_scenario_main,
+)
+from openapi_ai_test_evaluator.execution.scenario_relations import (
+    execute_scenario_relation,
+    execute_scenario_relations,
 )
 from openapi_ai_test_evaluator.execution.snapshots import (
     REDACTED_VALUE,
@@ -97,10 +105,14 @@ __all__ = [
     "build_response_snapshot",
     "execute_assertions",
     "execute_extractions",
+    "execute_lifecycle_relation",
+    "execute_lifecycle_relations",
     "execute_metamorphic_relation",
     "execute_metamorphic_relations",
     "execute_scenario_flow",
     "execute_scenario_main",
+    "execute_scenario_relation",
+    "execute_scenario_relations",
     "execute_step",
     "is_sensitive_name",
     "parse_response",

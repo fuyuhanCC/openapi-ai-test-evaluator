@@ -9,9 +9,10 @@ oracles.
 > implemented. Deterministic declarative assertions and response extraction are
 > also implemented and coordinated into single-step execution. Scenario-local
 > setup/main sequencing, variable propagation, and conditional cleanup are
-> implemented. The three V1 metamorphic relations are evaluated over real step
-> executions; lifecycle relations, DeepSeek integration, PetClinic, and fault
-> injection are planned next. There is not yet an `oate run` command.
+> implemented. All three V1 metamorphic relations and all three lifecycle
+> consistency checks are evaluated over real step executions; RunResult
+> aggregation, DeepSeek integration, PetClinic, and fault injection are planned
+> next. There is not yet an `oate run` command.
 
 ## What works today
 
@@ -45,6 +46,10 @@ oracles.
 - Runtime evaluation of repeated-read consistency, query-parameter order
   invariance, and pagination monotonicity, including explicit `not_applicable`,
   `failed`, and `error` outcomes.
+- Runtime evaluation of create-read, update-read, and delete-read lifecycle
+  consistency, including stable-field checks against a pre-update baseline.
+- Unified scenario-relation dispatch in TestPlan declaration order before
+  cleanup mutates or removes observed resources.
 - Generated JSON Schema for external tools and structured model output.
 - A CLI for validating plans independently or against an OpenAPI document.
 - Unit tests for valid and invalid contract behavior.

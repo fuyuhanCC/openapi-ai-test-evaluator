@@ -200,7 +200,7 @@ def test_repeated_read_ignores_declared_nested_changes() -> None:
         httpx.MockTransport(lambda request: httpx.Response(200, json=next(responses))),
     )
 
-    result = execution.metamorphic_results[0]
+    result = execution.relation_results[0]
     assert result.outcome is RelationOutcome.PASSED
     assert result.comparisons[0].operator is ComparisonOperator.EQUALS
 
@@ -220,7 +220,7 @@ def test_repeated_read_failure_is_structured_and_cleanup_still_runs() -> None:
         httpx.MockTransport(handler),
     )
 
-    result = execution.metamorphic_results[0]
+    result = execution.relation_results[0]
     assert calls == 3
     assert result.outcome is RelationOutcome.FAILED
     assert result.comparisons[0].outcome is ExecutionOutcome.FAILED
@@ -248,7 +248,7 @@ def test_query_order_compares_item_key_sets(
         httpx.MockTransport(lambda request: httpx.Response(200, json=next(responses))),
     )
 
-    result = execution.metamorphic_results[0]
+    result = execution.relation_results[0]
     assert result.outcome is expected
     assert result.comparisons[0].operator is ComparisonOperator.SET_EQUALS
 
@@ -259,7 +259,7 @@ def test_query_order_is_not_applicable_when_runtime_order_did_not_change() -> No
         httpx.MockTransport(lambda request: httpx.Response(200, json=item_list([item(1)]))),
     )
 
-    result = execution.metamorphic_results[0]
+    result = execution.relation_results[0]
     assert result.outcome is RelationOutcome.NOT_APPLICABLE
     assert result.message == "resolved query parameter order did not change"
     assert result.comparisons == []
@@ -278,7 +278,7 @@ def test_pagination_supports_subset_and_prefix_modes() -> None:
         httpx.MockTransport(lambda request: httpx.Response(200, json=next(responses))),
     )
 
-    subset, prefix = execution.metamorphic_results
+    subset, prefix = execution.relation_results
     assert subset.outcome is RelationOutcome.PASSED
     assert subset.comparisons[0].operator is ComparisonOperator.SUBSET
     assert prefix.outcome is RelationOutcome.FAILED
@@ -298,7 +298,7 @@ def test_invalid_relation_response_shape_is_an_error() -> None:
         httpx.MockTransport(lambda request: httpx.Response(200, json=next(responses))),
     )
 
-    result = execution.metamorphic_results[0]
+    result = execution.relation_results[0]
     assert result.outcome is RelationOutcome.ERROR
     assert "is not an array" in (result.message or "")
     assert result.errors[0].category is ErrorCategory.METAMORPHIC_RELATION_VIOLATED
@@ -315,7 +315,7 @@ def test_relation_is_not_applicable_when_follow_up_step_did_not_execute() -> Non
         httpx.MockTransport(lambda request: httpx.Response(200, json=item_list([item(1)]))),
     )
 
-    result = execution.metamorphic_results[0]
+    result = execution.relation_results[0]
     assert len(execution.main.step_executions) == 1
     assert result.outcome is RelationOutcome.NOT_APPLICABLE
     assert result.message == "referenced steps did not both execute"
