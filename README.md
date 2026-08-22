@@ -7,9 +7,11 @@ oracles.
 > **Current status:** the V1 contracts, OpenAPI 3.0/3.1 common-subset loader,
 > plan-to-spec semantic validation, and core HTTP execution pipeline are
 > implemented. Deterministic declarative assertions and response extraction are
-> also implemented and coordinated into single-step execution; scenario
-> orchestration, DeepSeek integration, PetClinic, and fault injection are planned
-> next. There is not yet an `oate run` command.
+> also implemented and coordinated into single-step execution. Scenario-local
+> setup/main sequencing, variable propagation, and conditional cleanup are
+> implemented. The three V1 metamorphic relations are evaluated over real step
+> executions; lifecycle relations, DeepSeek integration, PetClinic, and fault
+> injection are planned next. There is not yet an `oate run` command.
 
 ## What works today
 
@@ -34,6 +36,15 @@ oracles.
   missing-value handling and separately sanitized RunResult evidence.
 - Single-step execution coordination with stable outcomes and structured errors
   for request, transport, assertion, and extraction failures.
+- Isolated scenario variable scopes with ordered setup/main execution, extracted
+  value propagation, and deterministic stop-on-failure behavior.
+- Conditional `always`/`on_success`/`on_failure` cleanup execution with explicit
+  skipped results and required versus best-effort outcome policies.
+- Relation value selection from executed request bodies, response bodies, and
+  response statuses, with raw in-memory values and sanitized result snapshots.
+- Runtime evaluation of repeated-read consistency, query-parameter order
+  invariance, and pagination monotonicity, including explicit `not_applicable`,
+  `failed`, and `error` outcomes.
 - Generated JSON Schema for external tools and structured model output.
 - A CLI for validating plans independently or against an OpenAPI document.
 - Unit tests for valid and invalid contract behavior.

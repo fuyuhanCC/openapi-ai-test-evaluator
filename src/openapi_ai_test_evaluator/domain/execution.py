@@ -224,6 +224,7 @@ class RelationResult(ContractModel):
     follow_up_step: Identifier
     baseline_step: Identifier | None
     outcome: RelationOutcome
+    message: str | None = None
     comparisons: list[RelationComparisonResult] = Field(default_factory=list)
     errors: list[StructuredError] = Field(default_factory=list)
 
@@ -239,6 +240,8 @@ class RelationResult(ContractModel):
         if self.outcome in {RelationOutcome.PASSED, RelationOutcome.FAILED}:
             if not self.comparisons:
                 raise ValueError("evaluated relation results require at least one comparison")
+        if self.outcome is RelationOutcome.NOT_APPLICABLE and not self.message:
+            raise ValueError("not_applicable relation results require a message")
         return self
 
 

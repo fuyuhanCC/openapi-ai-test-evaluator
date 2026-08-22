@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import perf_counter_ns
 
 from pydantic import JsonValue
@@ -54,9 +54,9 @@ class StepExecution:
     """Stored step result plus raw in-memory values needed by scenario execution."""
 
     result: StepResult
-    extracted_values: tuple[tuple[str, JsonValue], ...]
-    prepared_request: PreparedRequest | None
-    processed_response: ProcessedResponse | None
+    extracted_values: tuple[tuple[str, JsonValue], ...] = field(repr=False)
+    prepared_request: PreparedRequest | None = field(repr=False)
+    processed_response: ProcessedResponse | None = field(repr=False)
 
 
 def execute_step(
@@ -178,6 +178,29 @@ def execute_step(
         extracted_values=extraction_batch.values,
         prepared_request=prepared_request,
         processed_response=processed_response,
+    )
+
+
+def skip_step(step: RequestStep, phase: StepPhase) -> StepExecution:
+    """Create an explicit skipped execution without building or sending a request."""
+    return StepExecution(
+        result=StepResult(
+            phase=phase,
+            step_id=step.id,
+            operation_id=step.operation_id,
+            outcome_policy=_outcome_policy(step, phase),
+            outcome=ExecutionOutcome.SKIPPED,
+            duration_ms=0,
+            retry_count=0,
+            request=None,
+            response=None,
+            extractions=[],
+            assertions=[],
+            errors=[],
+        ),
+        extracted_values=(),
+        prepared_request=None,
+        processed_response=None,
     )
 
 

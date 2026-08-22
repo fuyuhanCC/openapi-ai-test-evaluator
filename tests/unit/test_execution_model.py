@@ -196,6 +196,30 @@ def test_rejects_relation_kind_that_does_not_match_type() -> None:
         RunResult.model_validate(raw_result)
 
 
+def test_not_applicable_relation_requires_an_explanation() -> None:
+    raw_result = minimal_result()
+    scenarios = raw_result["scenarios"]
+    assert isinstance(scenarios, list)
+    scenario = scenarios[0]
+    assert isinstance(scenario, dict)
+    scenario["relations"] = [
+        {
+            "relation_id": "read-consistency",
+            "kind": "metamorphic",
+            "type": "repeated_read_consistency",
+            "source_step": "read",
+            "follow_up_step": "read",
+            "baseline_step": None,
+            "outcome": "not_applicable",
+            "comparisons": [],
+            "errors": [],
+        }
+    ]
+
+    with pytest.raises(ValidationError, match="require a message"):
+        RunResult.model_validate(raw_result)
+
+
 def test_rejects_duplicate_step_ids() -> None:
     raw_result = minimal_result()
     scenarios = raw_result["scenarios"]

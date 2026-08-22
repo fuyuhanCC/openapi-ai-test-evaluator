@@ -442,6 +442,7 @@ scenarios:
         follow_up_step: read-created
         baseline_step: null
         outcome: passed
+        message: null
 
         comparisons:
           - comparison_id: comparison-1
@@ -679,6 +680,38 @@ declared and detected violation categories is already performed during static
 validation for statically decidable values; extending that exact comparison to
 values available only at runtime remains part of scenario-runner integration.
 
+Scenario setup and main steps execute serially within a copy of the plan's
+initial variable scope. After each step, every successfully extracted value is
+merged before the stop decision, so a resource identifier obtained by a failed
+step remains available to later cleanup. A later successful extraction with the
+same name replaces the earlier value. Any non-passing setup or main step halts
+the remaining required steps. This stage returns `ScenarioMainExecution`, an
+explicit intermediate containing step executions, final in-memory variables,
+and the step that caused the halt; it is not exposed as a complete
+`ScenarioResult` until cleanup and relation evaluation have run. Raw variables
+and exchange objects are excluded from dataclass representations to reduce
+accidental disclosure through diagnostic logging.
+
+Declared metamorphic relations are evaluated after setup/main execution and
+before cleanup can mutate or delete the observed resources. The runtime engine
+first rechecks that the resolved requests actually satisfy the transformation
+assumed by the relation. A failed precondition is recorded as `not_applicable`;
+a false response comparison is `failed`; and an unavailable or structurally
+unusable response is `error`. Comparisons use raw in-memory values, while only
+sanitized `RelationValueSnapshot` evidence enters the result.
+
+Cleanup conditions are evaluated against the completed setup/main flow, not
+against earlier cleanup outcomes. `always`, `on_success`, and `on_failure`
+therefore produce deterministic execution or an explicit `skipped` step result.
+Eligible cleanup steps all run in declaration order even if an earlier cleanup
+fails, maximizing isolation between experiments. Successfully extracted cleanup
+values remain available to later cleanup steps. A normal cleanup uses the
+`required` outcome policy; `ignore_errors: true` records `best_effort`. Both
+retain their own actual step outcome, while the eventual scenario aggregator
+will exclude only best-effort failures from its parent outcome. The combined
+main execution, metamorphic results, and cleanup executions are retained in
+`ScenarioFlowExecution` before aggregation into a final `ScenarioResult`.
+
 The runner classifies failures rather than returning a single generic error.
 Initial categories include:
 
@@ -700,6 +733,14 @@ An LLM response is never consulted by the runner after generation.
 
 ## 12. Scenario Relations
 
+All relation types share one deterministic value-selection boundary. It reads
+the resolved in-memory request body, processed response body, or raw response
+status from a `StepExecution` using the same JSON Pointer rules as assertions
+and extractions. Selection keeps the raw value only for comparison and creates
+a separately sanitized `RelationValueSnapshot` for RunResult storage. JSON
+`null` remains a valid selected value; a missing pointer, absent request body,
+unavailable response, binary body, or invalid pointer is reported explicitly.
+
 ### 12.1 Metamorphic testing
 
 Metamorphic testing is an established testing technique rather than a
@@ -716,25 +757,29 @@ deterministic relation between their results. Each relation declares:
 - The expected relation.
 
 If applicability cannot be established, the result is `not_applicable`, not a
-pass or failure.
+pass or failure. V1 rechecks applicability using fully resolved
+`PreparedRequest` values, because two statically valid `$var` references may
+resolve differently at runtime.
 
 #### MR1: Repeated-read consistency
 
 Repeat the same safe read while the SUT state is unchanged. Stable selected
 fields must remain equal. Volatile fields such as timestamps and trace IDs are
-excluded explicitly.
+excluded explicitly. An ignore pointer may remove a nested field from a larger
+selected object or suppress a selected field entirely.
 
 #### MR2: Query-parameter order invariance
 
 Send semantically identical requests with distinct query parameters in a
 different order. Canonicalized responses must be equivalent. If list order is
-not part of the API contract, values are compared by configured stable keys.
+not part of the API contract, configured item keys are compared as a set, so
+collection order and unrelated item fields do not affect the verdict.
 
 #### MR3: Pagination monotonicity
 
 For the same filters and offset, increase the page limit. Under stable ordering
 and unchanged state, identifiers from the smaller result must be a subset or
-prefix of the larger result.
+prefix of the larger result, according to the relation's explicit `mode`.
 
 ### 12.2 Lifecycle consistency checks
 

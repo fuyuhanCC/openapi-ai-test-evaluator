@@ -40,7 +40,7 @@ def select_response_value(
     if pointer is None:
         raise ResponseSelectionError(f"{source} requires a JSON Pointer")
     if source == "response.headers":
-        return _value_at_pointer(
+        return select_json_pointer_value(
             _headers_as_json(response.raw.headers),
             pointer,
             casefold_first_token=True,
@@ -55,7 +55,7 @@ def select_response_value(
         return SelectedResponseValue(found=False, value=None)
     if response.data.body_kind is ResponseBodyKind.BINARY:
         raise ResponseSelectionError("binary response bodies cannot be selected")
-    return _value_at_pointer(response.data.body, pointer)
+    return select_json_pointer_value(response.data.body, pointer)
 
 
 def response_pointer_is_sensitive(source: ResponseValueSource, pointer: str | None) -> bool:
@@ -93,12 +93,13 @@ def _headers_as_json(headers: tuple[tuple[str, str], ...]) -> dict[str, JsonValu
     return values
 
 
-def _value_at_pointer(
+def select_json_pointer_value(
     value: JsonValue,
     pointer: str,
     *,
     casefold_first_token: bool = False,
 ) -> SelectedResponseValue:
+    """Select a value from JSON-compatible data using RFC 6901 semantics."""
     tokens = pointer_tokens(pointer)
     if casefold_first_token and tokens:
         tokens[0] = tokens[0].casefold()

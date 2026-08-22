@@ -6,6 +6,10 @@ from openapi_ai_test_evaluator.execution.extractions import (
     ExtractionIssue,
     execute_extractions,
 )
+from openapi_ai_test_evaluator.execution.metamorphic_relations import (
+    execute_metamorphic_relation,
+    execute_metamorphic_relations,
+)
 from openapi_ai_test_evaluator.execution.openapi_adapters import (
     OpenAPIRequestAdapter,
     OpenAPIResponseAdapter,
@@ -16,6 +20,11 @@ from openapi_ai_test_evaluator.execution.openapi_validation import (
     OpenAPIContractValidator,
     OpenAPIValidationIssue,
     OpenAPIValidationSubject,
+)
+from openapi_ai_test_evaluator.execution.relation_values import (
+    RelationValueSelectionError,
+    SelectedRelationValue,
+    select_relation_value,
 )
 from openapi_ai_test_evaluator.execution.request_builder import (
     PreparedRequest,
@@ -33,6 +42,12 @@ from openapi_ai_test_evaluator.execution.response_processor import (
     ResponseParseIssue,
     process_response,
 )
+from openapi_ai_test_evaluator.execution.scenario_executor import (
+    ScenarioFlowExecution,
+    ScenarioMainExecution,
+    execute_scenario_flow,
+    execute_scenario_main,
+)
 from openapi_ai_test_evaluator.execution.snapshots import (
     REDACTED_VALUE,
     build_request_snapshot,
@@ -40,7 +55,11 @@ from openapi_ai_test_evaluator.execution.snapshots import (
     is_sensitive_name,
     sanitize_json_value,
 )
-from openapi_ai_test_evaluator.execution.step_executor import StepExecution, execute_step
+from openapi_ai_test_evaluator.execution.step_executor import (
+    StepExecution,
+    execute_step,
+    skip_step,
+)
 from openapi_ai_test_evaluator.execution.transport import (
     HttpTransport,
     TransportFailure,
@@ -60,10 +79,14 @@ __all__ = [
     "ProcessedResponse",
     "REDACTED_VALUE",
     "RequestBuildError",
+    "RelationValueSelectionError",
     "ResponseBodyKind",
     "ResponseData",
     "ResponseParseError",
     "ResponseParseIssue",
+    "ScenarioFlowExecution",
+    "ScenarioMainExecution",
+    "SelectedRelationValue",
     "StepExecution",
     "TransportFailure",
     "TransportResponse",
@@ -74,9 +97,15 @@ __all__ = [
     "build_response_snapshot",
     "execute_assertions",
     "execute_extractions",
+    "execute_metamorphic_relation",
+    "execute_metamorphic_relations",
+    "execute_scenario_flow",
+    "execute_scenario_main",
     "execute_step",
     "is_sensitive_name",
     "parse_response",
     "process_response",
     "sanitize_json_value",
+    "select_relation_value",
+    "skip_step",
 ]

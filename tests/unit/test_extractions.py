@@ -136,6 +136,7 @@ def test_redacts_a_value_selected_by_a_sensitive_header_name() -> None:
     assert batch.results[0].value == REDACTED_VALUE
     assert batch.results[0].redacted is True
     assert batch.values == (("auth", "Bearer unsafe-secret"),)
+    assert "unsafe-secret" not in repr(batch)
 
 
 def test_body_parse_failure_is_an_extraction_error() -> None:
