@@ -18,15 +18,17 @@ from openapi_ai_test_evaluator.domain.test_plan import (
     AssertionOperator,
     ResponseSelector,
 )
-from openapi_ai_test_evaluator.execution.response_parser import ResponseBodyKind
 from openapi_ai_test_evaluator.execution.response_processor import ProcessedResponse
+from openapi_ai_test_evaluator.execution.response_selection import (
+    ResponseSelectionError,
+    response_pointer_is_sensitive,
+    select_response_value,
+)
 from openapi_ai_test_evaluator.execution.snapshots import (
     REDACTED_VALUE,
     is_sensitive_name,
     sanitize_json_value,
 )
-
-_MISSING = object()
 
 
 class _AssertionEvaluationError(ValueError):
@@ -82,8 +84,15 @@ def _execute_assertion(
             if assertion.operator is AssertionOperator.EXISTS
             else _resolve_runtime_value(cast(JsonValue, assertion.expected), variables)
         )
-        actual = _select_actual(assertion.actual, response)
-        if actual is _MISSING:
+        try:
+            selection = select_response_value(
+                response,
+                assertion.actual.source,
+                assertion.actual.pointer,
+            )
+        except ResponseSelectionError as error:
+            raise _AssertionEvaluationError(str(error)) from error
+        if not selection.found:
             return AssertionResult(
                 assertion_id=assertion_id,
                 operator=assertion.operator,
@@ -93,7 +102,7 @@ def _execute_assertion(
                 message="selected response value is missing",
                 issues=[],
             )
-        actual_value = cast(JsonValue, actual)
+        actual_value = cast(JsonValue, selection.value)
         passed = _evaluate_predicate(assertion.operator, actual_value, expected)
     except _AssertionEvaluationError as error:
         return AssertionResult(
@@ -131,98 +140,6 @@ def _predicate_result(
         message=None if passed else f"{assertion.operator.value} assertion failed",
         issues=[],
     )
-
-
-def _select_actual(
-    selector: ResponseSelector,
-    response: ProcessedResponse,
-) -> JsonValue | object:
-    if selector.source == "response.status":
-        return response.raw.status_code
-
-    if selector.source == "response.headers":
-        assert selector.pointer is not None
-        header_value = _headers_as_json(response.raw.headers)
-        return _value_at_pointer(header_value, selector.pointer, casefold_first_token=True)
-
-    assert selector.source == "response.body"
-    assert selector.pointer is not None
-    if response.data is None:
-        assert response.parse_issue is not None
-        raise _AssertionEvaluationError(
-            f"response body is unavailable: {response.parse_issue.message}"
-        )
-    if response.data.body_kind is ResponseBodyKind.EMPTY:
-        return _MISSING
-    if response.data.body_kind is ResponseBodyKind.BINARY:
-        raise _AssertionEvaluationError("binary response bodies cannot be selected")
-    return _value_at_pointer(response.data.body, selector.pointer)
-
-
-def _headers_as_json(headers: tuple[tuple[str, str], ...]) -> dict[str, JsonValue]:
-    values: dict[str, JsonValue] = {}
-    for name, value in headers:
-        key = name.casefold()
-        existing = values.get(key, _MISSING)
-        if existing is _MISSING:
-            values[key] = value
-        elif isinstance(existing, list):
-            existing.append(value)
-        else:
-            values[key] = [cast(JsonValue, existing), value]
-    return values
-
-
-def _value_at_pointer(
-    value: JsonValue,
-    pointer: str,
-    *,
-    casefold_first_token: bool = False,
-) -> JsonValue | object:
-    tokens = _pointer_tokens(pointer)
-    if casefold_first_token and tokens:
-        tokens[0] = tokens[0].casefold()
-
-    current: JsonValue = value
-    for token in tokens:
-        if isinstance(current, dict):
-            if token not in current:
-                return _MISSING
-            current = current[token]
-            continue
-        if isinstance(current, list):
-            if not re.fullmatch(r"0|[1-9][0-9]*", token):
-                return _MISSING
-            index = int(token)
-            if index >= len(current):
-                return _MISSING
-            current = current[index]
-            continue
-        return _MISSING
-    return current
-
-
-def _pointer_tokens(pointer: str) -> list[str]:
-    if pointer == "":
-        return []
-    if not pointer.startswith("/"):
-        raise _AssertionEvaluationError("invalid JSON Pointer")
-    return [_decode_pointer_token(token) for token in pointer[1:].split("/")]
-
-
-def _decode_pointer_token(token: str) -> str:
-    decoded: list[str] = []
-    index = 0
-    while index < len(token):
-        if token[index] != "~":
-            decoded.append(token[index])
-            index += 1
-            continue
-        if index + 1 >= len(token) or token[index + 1] not in {"0", "1"}:
-            raise _AssertionEvaluationError("invalid JSON Pointer escape")
-        decoded.append("~" if token[index + 1] == "0" else "/")
-        index += 2
-    return "".join(decoded)
 
 
 def _evaluate_predicate(
@@ -386,13 +303,7 @@ def _stored_value(
 
 
 def _selector_is_sensitive(selector: ResponseSelector) -> bool:
-    if selector.source == "response.status" or not selector.pointer:
-        return False
-    try:
-        tokens = _pointer_tokens(selector.pointer)
-    except _AssertionEvaluationError:
-        return False
-    return bool(tokens) and is_sensitive_name(tokens[-1])
+    return response_pointer_is_sensitive(selector.source, selector.pointer)
 
 
 def _assign_assertion_ids(assertions: Sequence[Assertion]) -> tuple[str, ...]:

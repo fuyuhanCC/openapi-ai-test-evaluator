@@ -1,6 +1,11 @@
 """Deterministic TestPlan execution helpers."""
 
 from openapi_ai_test_evaluator.execution.assertions import execute_assertions
+from openapi_ai_test_evaluator.execution.extractions import (
+    ExtractionBatch,
+    ExtractionIssue,
+    execute_extractions,
+)
 from openapi_ai_test_evaluator.execution.openapi_adapters import (
     OpenAPIRequestAdapter,
     OpenAPIResponseAdapter,
@@ -35,6 +40,7 @@ from openapi_ai_test_evaluator.execution.snapshots import (
     is_sensitive_name,
     sanitize_json_value,
 )
+from openapi_ai_test_evaluator.execution.step_executor import StepExecution, execute_step
 from openapi_ai_test_evaluator.execution.transport import (
     HttpTransport,
     TransportFailure,
@@ -43,6 +49,8 @@ from openapi_ai_test_evaluator.execution.transport import (
 
 __all__ = [
     "HttpTransport",
+    "ExtractionBatch",
+    "ExtractionIssue",
     "OpenAPIRequestAdapter",
     "OpenAPIResponseAdapter",
     "OpenAPIContractValidator",
@@ -56,6 +64,7 @@ __all__ = [
     "ResponseData",
     "ResponseParseError",
     "ResponseParseIssue",
+    "StepExecution",
     "TransportFailure",
     "TransportResponse",
     "adapt_openapi_request",
@@ -64,6 +73,8 @@ __all__ = [
     "build_request_snapshot",
     "build_response_snapshot",
     "execute_assertions",
+    "execute_extractions",
+    "execute_step",
     "is_sensitive_name",
     "parse_response",
     "process_response",

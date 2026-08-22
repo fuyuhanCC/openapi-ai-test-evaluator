@@ -654,6 +654,31 @@ ordinary predicates instead of allowing `not_equals` to pass accidentally.
 Assertion evidence is compared in memory first and sanitized before entering
 the stored result; sensitive header and JSON field names are redacted.
 
+The extraction executor uses the same response selector and JSON Pointer rules
+as assertions. It returns extracted in-memory values separately from sanitized
+`ExtractionResult` artifacts and does not mutate the caller's variable scope.
+An existing JSON `null` is recorded as `extracted`, while an absent pointer is
+recorded as `missing`. Required missing values and selection errors emit issues
+for later step-level error mapping; optional missing values do not. Sensitive
+headers, selected sensitive fields, and sensitive fields nested inside an
+extracted object are redacted only in stored evidence.
+
+The step executor coordinates one `RequestStep` across request construction,
+runtime request validation, transport, response processing, assertions,
+extractions, and snapshot creation. It returns a stored `StepResult` together
+with the in-memory prepared request, processed response, and extracted values
+needed by later scenario execution. It does not mutate the caller's variable
+scope. Assertion failures and required missing extractions produce `failed`;
+transport, request construction, assertion evaluation, and extraction
+evaluation errors produce `error`.
+
+Before transport, a `conformant` request is blocked if `openapi-core` reports a
+runtime request-contract issue. An `intentionally_invalid` request is sent only
+when at least one runtime contract issue is observed. Exact comparison between
+declared and detected violation categories is already performed during static
+validation for statically decidable values; extending that exact comparison to
+values available only at runtime remains part of scenario-runner integration.
+
 The runner classifies failures rather than returning a single generic error.
 Initial categories include:
 

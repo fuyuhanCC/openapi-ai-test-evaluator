@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from openapi_ai_test_evaluator.domain import RunResult
+from openapi_ai_test_evaluator.domain.execution import ExtractionResult
 
 
 def empty_body() -> dict[str, object]:
@@ -271,3 +272,34 @@ def test_schema_contains_top_level_contract_and_error_categories() -> None:
         "scenarios",
     }
     assert "runner_internal_error" in schema["$defs"]["ErrorCategory"]["enum"]
+
+
+def test_accepts_partially_redacted_nested_extraction_value() -> None:
+    result = ExtractionResult.model_validate(
+        {
+            "variable": "item",
+            "source": "response.body",
+            "pointer": "",
+            "required": True,
+            "status": "extracted",
+            "value": {"id": 7, "credentials": {"token": "[REDACTED]"}},
+            "redacted": True,
+        }
+    )
+
+    assert result.redacted is True
+
+
+def test_rejects_redacted_flag_without_an_extracted_value() -> None:
+    with pytest.raises(ValidationError, match="only extracted values may be marked as redacted"):
+        ExtractionResult.model_validate(
+            {
+                "variable": "item",
+                "source": "response.body",
+                "pointer": "/id",
+                "required": True,
+                "status": "missing",
+                "value": None,
+                "redacted": True,
+            }
+        )

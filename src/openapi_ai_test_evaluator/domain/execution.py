@@ -149,9 +149,21 @@ class ExtractionResult(ContractModel):
     def validate_stored_value(self) -> Self:
         if self.status is not ExtractionStatus.EXTRACTED and self.value is not None:
             raise ValueError("only extracted values may store a value")
-        if self.redacted and self.value != "[REDACTED]":
-            raise ValueError("redacted extraction values must be stored as '[REDACTED]'")
+        if self.status is not ExtractionStatus.EXTRACTED and self.redacted:
+            raise ValueError("only extracted values may be marked as redacted")
+        if self.redacted and not _contains_redaction_marker(self.value):
+            raise ValueError("redacted extraction values must contain '[REDACTED]'")
         return self
+
+
+def _contains_redaction_marker(value: JsonValue | None) -> bool:
+    if value == "[REDACTED]":
+        return True
+    if isinstance(value, list):
+        return any(_contains_redaction_marker(item) for item in value)
+    if isinstance(value, dict):
+        return any(_contains_redaction_marker(item) for item in value.values())
+    return False
 
 
 class AssertionIssue(ContractModel):
