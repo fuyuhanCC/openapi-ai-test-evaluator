@@ -516,6 +516,15 @@ The following invariants apply:
 - All request, response, extraction, evidence, and diagnostic values are
   sanitized before serialization.
 
+Scenario aggregation records every declared setup, main, and cleanup step. A
+step not reached after an earlier required failure is materialized as
+`skipped`, so relation references and execution order remain complete in the
+artifact. Required step and relation `error` outcomes take precedence over
+`failed`, which takes precedence over `passed`. `not_applicable` relations,
+conditionally skipped cleanup, and failed `best_effort` cleanup do not fail the
+parent. Run outcome applies the same `error` then `failed` then `passed`
+precedence across scenarios.
+
 ### 8.5 `EvaluationResult`
 
 `EvaluationResult` contains aggregate metrics, per-fault outcomes, run metadata,
@@ -980,6 +989,13 @@ oate report --run <artifact-directory>
 ```
 
 Command output is concise for humans and supports JSON mode for CI.
+`oate plan validate`, `oate plan schema`, and `oate run` are currently
+implemented. `oate run` repeats semantic validation before opening the
+transport, executes scenarios serially with isolated variable scopes, and
+returns nonzero for failed or errored runs while preserving the RunResult JSON.
+The supplied base URL is the sole target origin and redirects are disabled.
+Mutating plans require the explicit `--allow-mutations` confirmation for an
+isolated test environment.
 
 ## 18. Repository Layout
 

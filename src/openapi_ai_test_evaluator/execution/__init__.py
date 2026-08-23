@@ -25,6 +25,12 @@ from openapi_ai_test_evaluator.execution.openapi_validation import (
     OpenAPIValidationIssue,
     OpenAPIValidationSubject,
 )
+from openapi_ai_test_evaluator.execution.plan_executor import (
+    MutationExecutionRejected,
+    PlanExecutionRejected,
+    execute_test_plan,
+    validate_base_url,
+)
 from openapi_ai_test_evaluator.execution.relation_values import (
     RelationValueSelectionError,
     SelectedRelationValue,
@@ -45,6 +51,10 @@ from openapi_ai_test_evaluator.execution.response_processor import (
     ProcessedResponse,
     ResponseParseIssue,
     process_response,
+)
+from openapi_ai_test_evaluator.execution.result_aggregator import (
+    aggregate_run_result,
+    aggregate_scenario_result,
 )
 from openapi_ai_test_evaluator.execution.scenario_executor import (
     ScenarioFlowExecution,
@@ -83,6 +93,8 @@ __all__ = [
     "OpenAPIContractValidator",
     "OpenAPIValidationIssue",
     "OpenAPIValidationSubject",
+    "MutationExecutionRejected",
+    "PlanExecutionRejected",
     "PreparedRequest",
     "ProcessedResponse",
     "REDACTED_VALUE",
@@ -100,6 +112,8 @@ __all__ = [
     "TransportResponse",
     "adapt_openapi_request",
     "adapt_openapi_response",
+    "aggregate_run_result",
+    "aggregate_scenario_result",
     "build_request",
     "build_request_snapshot",
     "build_response_snapshot",
@@ -114,10 +128,12 @@ __all__ = [
     "execute_scenario_relation",
     "execute_scenario_relations",
     "execute_step",
+    "execute_test_plan",
     "is_sensitive_name",
     "parse_response",
     "process_response",
     "sanitize_json_value",
     "select_relation_value",
     "skip_step",
+    "validate_base_url",
 ]

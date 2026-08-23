@@ -10,9 +10,10 @@ oracles.
 > also implemented and coordinated into single-step execution. Scenario-local
 > setup/main sequencing, variable propagation, and conditional cleanup are
 > implemented. All three V1 metamorphic relations and all three lifecycle
-> consistency checks are evaluated over real step executions; RunResult
-> aggregation, DeepSeek integration, PetClinic, and fault injection are planned
-> next. There is not yet an `oate run` command.
+> consistency checks are evaluated over real step executions. Scenario outcomes
+> are aggregated into a complete RunResult and exposed through `oate run`;
+> generators, DeepSeek integration, PetClinic, and fault injection are planned
+> next.
 
 ## What works today
 
@@ -50,6 +51,10 @@ oracles.
   consistency, including stable-field checks against a pre-update baseline.
 - Unified scenario-relation dispatch in TestPlan declaration order before
   cleanup mutates or removes observed resources.
+- Deterministic ScenarioResult/RunResult aggregation with explicit skipped-step
+  artifacts, best-effort cleanup handling, timestamps, and fault metadata.
+- An `oate run` command with pre-execution semantic validation, explicit target
+  URL validation, mutation opt-in, JSON output, and CI-friendly exit codes.
 - Generated JSON Schema for external tools and structured model output.
 - A CLI for validating plans independently or against an OpenAPI document.
 - Unit tests for valid and invalid contract behavior.
@@ -90,6 +95,32 @@ uv run oate plan validate \
   --spec examples/demo-items/openapi-3.1.yaml \
   --plan examples/plans/all-methods.yaml
 ```
+
+## Run a TestPlan
+
+Execute a validated read-only plan and print a concise summary:
+
+```bash
+uv run oate run \
+  --spec examples/demo-items/openapi.yaml \
+  --plan examples/plans/minimal-get.yaml \
+  --base-url http://127.0.0.1:8000
+```
+
+Write the canonical RunResult JSON and also emit it to stdout:
+
+```bash
+uv run oate run \
+  --spec examples/demo-items/openapi.yaml \
+  --plan examples/plans/minimal-get.yaml \
+  --base-url http://127.0.0.1:8000 \
+  --out artifacts/manual-run.json \
+  --json
+```
+
+Plans containing `POST`, `PUT`, `PATCH`, or `DELETE` are rejected unless the
+caller adds `--allow-mutations` to confirm that the target is an isolated test
+environment. A failed or errored run still writes its result and exits nonzero.
 
 Export the generated JSON Schema:
 
