@@ -1,4 +1,4 @@
-"""Semantic validation between a TestPlan and a normalized OpenAPI document."""
+"""Semantic validation between API test cases and normalized OpenAPI documents."""
 
 from __future__ import annotations
 
@@ -7,23 +7,25 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
+from openapi_ai_test_evaluator.domain.contracts import ContractModel
 from openapi_ai_test_evaluator.domain.openapi import (
     OpenAPISpec,
     OperationModel,
     ParameterLocation,
     SchemaDefinition,
 )
-from openapi_ai_test_evaluator.domain.test_plan import (
+from openapi_ai_test_evaluator.domain.test_case import (
     AssertionOperator,
-    ContractModel,
+    ExecutionConfig,
     RelationType,
     RequestMode,
     RequestStep,
-    Scenario,
     ScenarioRelation,
-    TestPlan,
+    TestCase,
+    TestCaseBatch,
     ViolationCode,
 )
+from openapi_ai_test_evaluator.domain.test_plan import TestPlan
 from openapi_ai_test_evaluator.validation.schema_values import (
     is_variable_reference,
     schema_at_pointer,
@@ -860,13 +862,16 @@ def _validate_scenario_relation(
 
 
 def _validate_scenario(
-    scenario: Scenario,
+    scenario: TestCase,
     scenario_index: int,
-    plan: TestPlan,
     spec: OpenAPISpec,
+    *,
+    collection_path: str,
+    default_headers: dict[str, str],
+    initial_variables: dict[str, Any],
 ) -> list[SemanticIssue]:
     issues: list[SemanticIssue] = []
-    available_variables = set(plan.variables)
+    available_variables = set(initial_variables)
     step_models: dict[str, tuple[RequestStep, OperationModel]] = {}
     step_positions: dict[str, int] = {}
 
@@ -877,14 +882,14 @@ def _validate_scenario(
     )
     for section_name, steps in sections:
         for step_index, step in enumerate(steps):
-            path = f"scenarios[{scenario_index}].{section_name}[{step_index}]"
+            path = f"{collection_path}[{scenario_index}].{section_name}[{step_index}]"
             step_issues, operation = _validate_step(
                 step,
                 spec,
                 path,
                 available_variables,
-                plan.defaults.headers,
-                plan.variables,
+                default_headers,
+                initial_variables,
             )
             issues.extend(step_issues)
             if operation is not None and section_name != "cleanup":
@@ -893,7 +898,7 @@ def _validate_scenario(
             available_variables.update(extraction.variable for extraction in step.extract)
 
     for relation_index, relation in enumerate(scenario.relations):
-        path = f"scenarios[{scenario_index}].relations[{relation_index}]"
+        path = f"{collection_path}[{scenario_index}].relations[{relation_index}]"
         issues.extend(
             _validate_scenario_relation(relation, step_models, step_positions, spec, path)
         )
@@ -912,5 +917,37 @@ def validate_plan_semantics(plan: TestPlan, spec: OpenAPISpec) -> list[SemanticI
             )
         )
     for scenario_index, scenario in enumerate(plan.scenarios):
-        issues.extend(_validate_scenario(scenario, scenario_index, plan, spec))
+        issues.extend(
+            _validate_scenario(
+                scenario,
+                scenario_index,
+                spec,
+                collection_path="scenarios",
+                default_headers=plan.defaults.headers,
+                initial_variables=plan.variables,
+            )
+        )
+    return issues
+
+
+def validate_test_case_batch_semantics(
+    batch: TestCaseBatch,
+    spec: OpenAPISpec,
+    *,
+    config: ExecutionConfig | None = None,
+) -> list[SemanticIssue]:
+    """Return every semantic mismatch between runner-ready cases and a spec."""
+    issues: list[SemanticIssue] = []
+    actual_config = config or ExecutionConfig()
+    for case_index, case in enumerate(batch.cases):
+        issues.extend(
+            _validate_scenario(
+                case,
+                case_index,
+                spec,
+                collection_path="cases",
+                default_headers=actual_config.headers,
+                initial_variables=actual_config.initial_variables,
+            )
+        )
     return issues

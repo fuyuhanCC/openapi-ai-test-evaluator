@@ -8,11 +8,9 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, JsonValue, field_validator, model_validator
 
-from openapi_ai_test_evaluator.domain.test_plan import (
+from openapi_ai_test_evaluator.domain.contracts import ContractModel, Identifier, JsonPointer
+from openapi_ai_test_evaluator.domain.test_case import (
     AssertionOperator,
-    ContractModel,
-    Identifier,
-    JsonPointer,
     RelationKind,
     RelationType,
 )

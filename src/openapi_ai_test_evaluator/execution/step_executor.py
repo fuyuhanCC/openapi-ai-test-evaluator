@@ -19,11 +19,11 @@ from openapi_ai_test_evaluator.domain.execution import (
     StructuredError,
 )
 from openapi_ai_test_evaluator.domain.openapi import OpenAPISpec
-from openapi_ai_test_evaluator.domain.test_plan import (
+from openapi_ai_test_evaluator.domain.test_case import (
     Assertion,
     AssertionOperator,
     CleanupStep,
-    PlanDefaults,
+    ExecutionConfig,
     RequestMode,
     RequestStep,
 )
@@ -63,7 +63,7 @@ def execute_step(
     step: RequestStep,
     phase: StepPhase,
     spec: OpenAPISpec,
-    defaults: PlanDefaults,
+    defaults: ExecutionConfig,
     variables: Mapping[str, JsonValue],
     validator: OpenAPIContractValidator,
     transport: HttpTransport,

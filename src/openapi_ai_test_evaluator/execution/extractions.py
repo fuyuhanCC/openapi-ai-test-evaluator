@@ -9,7 +9,7 @@ from typing import Literal, cast
 from pydantic import JsonValue
 
 from openapi_ai_test_evaluator.domain.execution import ExtractionResult, ExtractionStatus
-from openapi_ai_test_evaluator.domain.test_plan import Extraction
+from openapi_ai_test_evaluator.domain.test_case import Extraction
 from openapi_ai_test_evaluator.execution.response_processor import ProcessedResponse
 from openapi_ai_test_evaluator.execution.response_selection import (
     ResponseSelectionError,

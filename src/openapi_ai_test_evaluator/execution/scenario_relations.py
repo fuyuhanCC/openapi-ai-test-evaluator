@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from openapi_ai_test_evaluator.domain.execution import RelationResult
-from openapi_ai_test_evaluator.domain.test_plan import (
+from openapi_ai_test_evaluator.domain.test_case import (
     RelationKind,
     ScenarioRelation,
 )

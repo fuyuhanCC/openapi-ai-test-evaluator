@@ -10,7 +10,7 @@ from urllib.parse import quote
 from pydantic import JsonValue
 
 from openapi_ai_test_evaluator.domain.openapi import OpenAPISpec, OperationModel
-from openapi_ai_test_evaluator.domain.test_plan import PlanDefaults, RequestStep
+from openapi_ai_test_evaluator.domain.test_case import ExecutionConfig, RequestStep
 
 _PATH_PARAMETER = re.compile(r"\{([^{}]+)\}")
 
@@ -42,7 +42,7 @@ def build_request(
     step: RequestStep,
     spec: OpenAPISpec,
     variables: Mapping[str, JsonValue],
-    defaults: PlanDefaults,
+    defaults: ExecutionConfig,
 ) -> PreparedRequest:
     """Resolve one TestPlan step without performing network I/O."""
     operation = spec.operations.get(step.operation_id)

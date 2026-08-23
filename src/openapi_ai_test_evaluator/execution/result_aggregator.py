@@ -16,13 +16,13 @@ from openapi_ai_test_evaluator.domain.execution import (
     StepPhase,
     StepResult,
 )
-from openapi_ai_test_evaluator.domain.test_plan import Scenario
+from openapi_ai_test_evaluator.domain.test_case import TestCase
 from openapi_ai_test_evaluator.execution.scenario_executor import ScenarioFlowExecution
 from openapi_ai_test_evaluator.execution.step_executor import skip_step
 
 
 def aggregate_scenario_result(
-    scenario: Scenario,
+    scenario: TestCase,
     execution: ScenarioFlowExecution,
 ) -> ScenarioResult:
     """Create a complete scenario artifact, including unexecuted skipped steps."""
@@ -69,7 +69,7 @@ def aggregate_run_result(
 
 
 def _complete_step_results(
-    scenario: Scenario,
+    scenario: TestCase,
     execution: ScenarioFlowExecution,
 ) -> list[StepResult]:
     actual = {

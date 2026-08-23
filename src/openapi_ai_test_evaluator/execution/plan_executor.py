@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from time import perf_counter_ns
 from uuid import uuid4
@@ -9,13 +10,15 @@ from uuid import uuid4
 import httpx
 from pydantic import TypeAdapter, ValidationError
 
+from openapi_ai_test_evaluator.domain.contracts import Identifier
 from openapi_ai_test_evaluator.domain.execution import (
     FaultObservation,
     FaultTriggerStatus,
     RunResult,
 )
 from openapi_ai_test_evaluator.domain.openapi import OpenAPISpec
-from openapi_ai_test_evaluator.domain.test_plan import Identifier, TestPlan
+from openapi_ai_test_evaluator.domain.test_case import ExecutionConfig, TestCase
+from openapi_ai_test_evaluator.domain.test_plan import TestPlan
 from openapi_ai_test_evaluator.execution.openapi_validation import OpenAPIContractValidator
 from openapi_ai_test_evaluator.execution.result_aggregator import (
     aggregate_run_result,
@@ -70,7 +73,40 @@ def execute_test_plan(
     """Execute every scenario serially with isolated variables and shared transport."""
     if semantic_issues := validate_plan_semantics(plan, spec):
         raise PlanExecutionRejected(semantic_issues)
-    mutating_operations = _mutating_operation_ids(plan, spec)
+    config = ExecutionConfig(
+        timeout_ms=plan.defaults.timeout_ms,
+        headers=plan.defaults.headers,
+        initial_variables=plan.variables,
+    )
+    return execute_validated_cases(
+        plan.scenarios,
+        spec,
+        base_url,
+        run_name=plan.metadata.name,
+        config=config,
+        run_id=run_id,
+        fault=fault,
+        allow_mutations=allow_mutations,
+        max_response_bytes=max_response_bytes,
+        httpx_transport=httpx_transport,
+    )
+
+
+def execute_validated_cases(
+    cases: Sequence[TestCase],
+    spec: OpenAPISpec,
+    base_url: str,
+    *,
+    run_name: str,
+    config: ExecutionConfig,
+    run_id: str | None = None,
+    fault: FaultObservation | None = None,
+    allow_mutations: bool = False,
+    max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
+    httpx_transport: httpx.BaseTransport | None = None,
+) -> RunResult:
+    """Execute cases whose OpenAPI semantics were already validated by their caller."""
+    mutating_operations = _mutating_operation_ids(cases, spec)
     if mutating_operations and not allow_mutations:
         raise MutationExecutionRejected(mutating_operations)
     normalized_base_url = validate_base_url(base_url)
@@ -93,12 +129,12 @@ def execute_test_plan(
         max_response_bytes=max_response_bytes,
         transport=httpx_transport,
     ) as transport:
-        for scenario in plan.scenarios:
+        for scenario in cases:
             execution = execute_scenario_flow(
                 scenario,
-                plan.variables,
+                config.initial_variables,
                 spec,
-                plan.defaults,
+                config,
                 validator,
                 transport,
             )
@@ -107,7 +143,7 @@ def execute_test_plan(
     finished_at = _utc_now()
     return aggregate_run_result(
         run_id=actual_run_id,
-        plan_name=plan.metadata.name,
+        plan_name=run_name,
         spec_id=spec.spec_id,
         started_at=started_at,
         finished_at=finished_at,
@@ -132,9 +168,12 @@ def validate_base_url(base_url: str) -> str:
     return str(parsed).rstrip("/")
 
 
-def _mutating_operation_ids(plan: TestPlan, spec: OpenAPISpec) -> list[str]:
+def _mutating_operation_ids(
+    cases: Sequence[TestCase],
+    spec: OpenAPISpec,
+) -> list[str]:
     operation_ids: list[str] = []
-    for scenario in plan.scenarios:
+    for scenario in cases:
         for step in (*scenario.setup, *scenario.steps, *scenario.cleanup):
             operation = spec.operations[step.operation_id]
             if operation.method not in _SAFE_METHODS and step.operation_id not in operation_ids:

@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import Field
 
-from openapi_ai_test_evaluator.domain.test_plan import ContractModel
+from openapi_ai_test_evaluator.domain.contracts import ContractModel
 
 SchemaDefinition = dict[str, Any] | bool
 SUPPORTED_STRING_FORMATS = frozenset({"date", "date-time", "uuid", "email", "uri", "ipv4", "ipv6"})

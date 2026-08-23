@@ -14,7 +14,7 @@ from openapi_ai_test_evaluator.domain.execution import (
     StepPhase,
 )
 from openapi_ai_test_evaluator.domain.openapi import OpenAPISpec
-from openapi_ai_test_evaluator.domain.test_plan import CleanupWhen, PlanDefaults, Scenario
+from openapi_ai_test_evaluator.domain.test_case import CleanupWhen, ExecutionConfig, TestCase
 from openapi_ai_test_evaluator.execution.openapi_validation import OpenAPIContractValidator
 from openapi_ai_test_evaluator.execution.scenario_relations import (
     execute_scenario_relations,
@@ -58,10 +58,10 @@ class ScenarioFlowExecution:
 
 
 def execute_scenario_main(
-    scenario: Scenario,
+    scenario: TestCase,
     initial_variables: Mapping[str, JsonValue],
     spec: OpenAPISpec,
-    defaults: PlanDefaults,
+    defaults: ExecutionConfig,
     validator: OpenAPIContractValidator,
     transport: HttpTransport,
 ) -> ScenarioMainExecution:
@@ -93,10 +93,10 @@ def execute_scenario_main(
 
 
 def execute_scenario_flow(
-    scenario: Scenario,
+    scenario: TestCase,
     initial_variables: Mapping[str, JsonValue],
     spec: OpenAPISpec,
-    defaults: PlanDefaults,
+    defaults: ExecutionConfig,
     validator: OpenAPIContractValidator,
     transport: HttpTransport,
 ) -> ScenarioFlowExecution:

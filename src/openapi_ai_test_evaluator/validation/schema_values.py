@@ -16,7 +16,7 @@ from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT4, DRAFT202012
 
 from openapi_ai_test_evaluator.domain.openapi import SchemaDefinition
-from openapi_ai_test_evaluator.domain.test_plan import ViolationCode
+from openapi_ai_test_evaluator.domain.test_case import ViolationCode
 from openapi_ai_test_evaluator.spec.loader import resolve_local_ref
 
 _DOCUMENT_URI = "urn:oate:openapi-document"

@@ -1,6 +1,10 @@
 """Deterministic TestPlan execution helpers."""
 
 from openapi_ai_test_evaluator.execution.assertions import execute_assertions
+from openapi_ai_test_evaluator.execution.case_batch_executor import (
+    CaseBatchExecutionRejected,
+    execute_test_case_batch,
+)
 from openapi_ai_test_evaluator.execution.extractions import (
     ExtractionBatch,
     ExtractionIssue,
@@ -85,6 +89,7 @@ from openapi_ai_test_evaluator.execution.transport import (
 )
 
 __all__ = [
+    "CaseBatchExecutionRejected",
     "HttpTransport",
     "ExtractionBatch",
     "ExtractionIssue",
@@ -128,6 +133,7 @@ __all__ = [
     "execute_scenario_relation",
     "execute_scenario_relations",
     "execute_step",
+    "execute_test_case_batch",
     "execute_test_plan",
     "is_sensitive_name",
     "parse_response",

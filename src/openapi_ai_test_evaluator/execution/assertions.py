@@ -13,7 +13,7 @@ from openapi_ai_test_evaluator.domain.execution import (
     AssertionResult,
     ExecutionOutcome,
 )
-from openapi_ai_test_evaluator.domain.test_plan import (
+from openapi_ai_test_evaluator.domain.test_case import (
     Assertion,
     AssertionOperator,
     ResponseSelector,

@@ -8,7 +8,7 @@ from typing import cast
 from pydantic import JsonValue
 
 from openapi_ai_test_evaluator.domain.execution import RelationValueSnapshot
-from openapi_ai_test_evaluator.domain.test_plan import RelationFieldReference
+from openapi_ai_test_evaluator.domain.test_case import RelationFieldReference
 from openapi_ai_test_evaluator.execution.response_selection import (
     ResponseSelectionError,
     SelectedResponseValue,

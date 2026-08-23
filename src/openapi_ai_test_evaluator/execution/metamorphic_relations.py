@@ -16,7 +16,7 @@ from openapi_ai_test_evaluator.domain.execution import (
     RelationComparisonResult,
     RelationResult,
 )
-from openapi_ai_test_evaluator.domain.test_plan import (
+from openapi_ai_test_evaluator.domain.test_case import (
     PaginationMode,
     RelationFieldReference,
     RelationKind,

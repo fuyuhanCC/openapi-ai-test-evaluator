@@ -13,7 +13,7 @@ from openapi_ai_test_evaluator.domain.execution import (
     RelationResult,
     StructuredError,
 )
-from openapi_ai_test_evaluator.domain.test_plan import ScenarioRelation
+from openapi_ai_test_evaluator.domain.test_case import ScenarioRelation
 from openapi_ai_test_evaluator.execution.relation_values import SelectedRelationValue
 
 
