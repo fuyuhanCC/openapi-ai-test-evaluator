@@ -1,6 +1,7 @@
 """Domain contracts exposed by the framework."""
 
-from openapi_ai_test_evaluator.domain.execution import RunResult
+from openapi_ai_test_evaluator.domain.execution import RunResult, TestCaseResult
+from openapi_ai_test_evaluator.domain.generation import GenerationRecord
 from openapi_ai_test_evaluator.domain.openapi import OpenAPISpec, OperationModel
 from openapi_ai_test_evaluator.domain.test_case import (
     ExecutionConfig,
@@ -11,10 +12,12 @@ from openapi_ai_test_evaluator.domain.test_plan import TestPlan
 
 __all__ = [
     "ExecutionConfig",
+    "GenerationRecord",
     "OpenAPISpec",
     "OperationModel",
     "RunResult",
     "TestCase",
     "TestCaseBatch",
+    "TestCaseResult",
     "TestPlan",
 ]

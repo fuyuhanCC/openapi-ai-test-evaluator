@@ -39,13 +39,13 @@ def test_executes_a_complete_plan_into_one_run_result() -> None:
 
     assert result.kind == "RunResult"
     assert result.run_id == "run-test"
-    assert result.plan_name == "minimal-get"
+    assert result.batch_name == "minimal-get"
     assert result.spec_id == "demo-items-v1"
     assert result.outcome is ExecutionOutcome.PASSED
     assert result.fault.trigger_status is FaultTriggerStatus.NOT_CONFIGURED
     assert result.started_at.tzinfo is not None
     assert result.finished_at >= result.started_at
-    assert result.scenarios[0].steps[0].assertions[1].outcome is ExecutionOutcome.PASSED
+    assert result.cases[0].steps[0].assertions[1].outcome is ExecutionOutcome.PASSED
 
 
 def test_continues_with_later_scenarios_after_an_earlier_failure() -> None:
@@ -105,7 +105,7 @@ def test_continues_with_later_scenarios_after_an_earlier_failure() -> None:
 
     assert calls == 2
     assert result.outcome is ExecutionOutcome.FAILED
-    assert [scenario.outcome for scenario in result.scenarios] == [
+    assert [case.outcome for case in result.cases] == [
         ExecutionOutcome.FAILED,
         ExecutionOutcome.PASSED,
     ]

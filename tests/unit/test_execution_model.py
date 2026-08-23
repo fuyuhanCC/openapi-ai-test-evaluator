@@ -18,10 +18,10 @@ def empty_body() -> dict[str, object]:
 
 def minimal_result() -> dict[str, object]:
     return {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "kind": "RunResult",
         "run_id": "run-20260820-001",
-        "plan_name": "minimal-get",
+        "batch_name": "minimal-get",
         "spec_id": "demo-items-v1",
         "started_at": "2026-08-20T10:00:00+08:00",
         "finished_at": "2026-08-20T10:00:00.050+08:00",
@@ -32,9 +32,9 @@ def minimal_result() -> dict[str, object]:
             "trigger_status": "not_configured",
             "trigger_count": 0,
         },
-        "scenarios": [
+        "cases": [
             {
-                "scenario_id": "read-item",
+                "case_id": "read-item",
                 "outcome": "passed",
                 "steps": [
                     {
@@ -76,11 +76,11 @@ def minimal_result() -> dict[str, object]:
 
 
 def first_step(raw_result: dict[str, object]) -> dict[str, object]:
-    scenarios = raw_result["scenarios"]
-    assert isinstance(scenarios, list)
-    scenario = scenarios[0]
-    assert isinstance(scenario, dict)
-    steps = scenario["steps"]
+    cases = raw_result["cases"]
+    assert isinstance(cases, list)
+    case = cases[0]
+    assert isinstance(case, dict)
+    steps = case["steps"]
     assert isinstance(steps, list)
     step = steps[0]
     assert isinstance(step, dict)
@@ -90,9 +90,12 @@ def first_step(raw_result: dict[str, object]) -> dict[str, object]:
 def test_accepts_minimal_run_result() -> None:
     result = RunResult.model_validate(minimal_result())
 
+    assert result.schema_version == "2.0"
+    assert result.batch_name == "minimal-get"
     assert result.run_id == "run-20260820-001"
-    assert result.scenarios[0].steps[0].response is not None
-    assert result.scenarios[0].steps[0].response.status_code == 200
+    assert result.cases[0].case_id == "read-item"
+    assert result.cases[0].steps[0].response is not None
+    assert result.cases[0].steps[0].response.status_code == 200
 
 
 def test_rejects_unknown_fields() -> None:
@@ -119,7 +122,17 @@ def test_rejects_timestamps_without_timezone() -> None:
         RunResult.model_validate(raw_result)
 
 
-def test_rejects_nonzero_retry_count_in_v1() -> None:
+def test_rejects_legacy_run_result_version_and_field_names() -> None:
+    raw_result = minimal_result()
+    raw_result["schema_version"] = "1.0"
+    raw_result["plan_name"] = raw_result.pop("batch_name")
+    raw_result["scenarios"] = raw_result.pop("cases")
+
+    with pytest.raises(ValidationError, match="Input should be '2.0'"):
+        RunResult.model_validate(raw_result)
+
+
+def test_rejects_nonzero_retry_count_in_v2() -> None:
     raw_result = minimal_result()
     first_step(raw_result)["retry_count"] = 1
 
@@ -174,11 +187,11 @@ def test_rejects_inconsistent_fault_observations(fault: dict[str, object], messa
 
 def test_rejects_relation_kind_that_does_not_match_type() -> None:
     raw_result = minimal_result()
-    scenarios = raw_result["scenarios"]
-    assert isinstance(scenarios, list)
-    scenario = scenarios[0]
-    assert isinstance(scenario, dict)
-    scenario["relations"] = [
+    cases = raw_result["cases"]
+    assert isinstance(cases, list)
+    case = cases[0]
+    assert isinstance(case, dict)
+    case["relations"] = [
         {
             "relation_id": "read-consistency",
             "kind": "lifecycle",
@@ -198,11 +211,11 @@ def test_rejects_relation_kind_that_does_not_match_type() -> None:
 
 def test_not_applicable_relation_requires_an_explanation() -> None:
     raw_result = minimal_result()
-    scenarios = raw_result["scenarios"]
-    assert isinstance(scenarios, list)
-    scenario = scenarios[0]
-    assert isinstance(scenario, dict)
-    scenario["relations"] = [
+    cases = raw_result["cases"]
+    assert isinstance(cases, list)
+    case = cases[0]
+    assert isinstance(case, dict)
+    case["relations"] = [
         {
             "relation_id": "read-consistency",
             "kind": "metamorphic",
@@ -222,11 +235,11 @@ def test_not_applicable_relation_requires_an_explanation() -> None:
 
 def test_rejects_duplicate_step_ids() -> None:
     raw_result = minimal_result()
-    scenarios = raw_result["scenarios"]
-    assert isinstance(scenarios, list)
-    scenario = scenarios[0]
-    assert isinstance(scenario, dict)
-    steps = scenario["steps"]
+    cases = raw_result["cases"]
+    assert isinstance(cases, list)
+    case = cases[0]
+    assert isinstance(case, dict)
+    steps = case["steps"]
     assert isinstance(steps, list)
     steps.append(deepcopy(steps[0]))
 
@@ -236,11 +249,11 @@ def test_rejects_duplicate_step_ids() -> None:
 
 def test_one_of_comparison_requires_expected_values() -> None:
     raw_result = minimal_result()
-    scenarios = raw_result["scenarios"]
-    assert isinstance(scenarios, list)
-    scenario = scenarios[0]
-    assert isinstance(scenario, dict)
-    scenario["relations"] = [
+    cases = raw_result["cases"]
+    assert isinstance(cases, list)
+    case = cases[0]
+    assert isinstance(case, dict)
+    case["relations"] = [
         {
             "relation_id": "deleted-item-unavailable",
             "kind": "lifecycle",
@@ -286,15 +299,16 @@ def test_schema_contains_top_level_contract_and_error_categories() -> None:
         "schema_version",
         "kind",
         "run_id",
-        "plan_name",
+        "batch_name",
         "spec_id",
         "started_at",
         "finished_at",
         "duration_ms",
         "outcome",
         "fault",
-        "scenarios",
+        "cases",
     }
+    assert "case_invalid" in schema["$defs"]["ErrorCategory"]["enum"]
     assert "runner_internal_error" in schema["$defs"]["ErrorCategory"]["enum"]
 
 

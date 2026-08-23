@@ -51,9 +51,10 @@ oracles.
   consistency, including stable-field checks against a pre-update baseline.
 - Unified scenario-relation dispatch in TestPlan declaration order before
   cleanup mutates or removes observed resources.
-- Deterministic ScenarioResult/RunResult aggregation with explicit skipped-step
+- Deterministic TestCaseResult/RunResult 2.0 aggregation with explicit skipped-step
   artifacts, best-effort cleanup handling, timestamps, and fault metadata.
-- An `oate run` command with pre-execution semantic validation, explicit target
+- `oate cases validate` and `oate cases run` commands with structural and
+  pre-execution semantic validation, explicit target
   URL validation, mutation opt-in, JSON output, and CI-friendly exit codes.
 - Generated JSON Schema for external tools and structured model output.
 - A CLI for validating plans independently or against an OpenAPI document.

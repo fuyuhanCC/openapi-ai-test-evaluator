@@ -22,7 +22,7 @@ from openapi_ai_test_evaluator.domain.test_plan import TestPlan
 from openapi_ai_test_evaluator.execution.openapi_validation import OpenAPIContractValidator
 from openapi_ai_test_evaluator.execution.result_aggregator import (
     aggregate_run_result,
-    aggregate_scenario_result,
+    aggregate_test_case_result,
 )
 from openapi_ai_test_evaluator.execution.scenario_executor import execute_scenario_flow
 from openapi_ai_test_evaluator.execution.transport import (
@@ -122,33 +122,33 @@ def execute_validated_cases(
     started_at = _utc_now()
     started_timer = perf_counter_ns()
     validator = OpenAPIContractValidator(spec, normalized_base_url)
-    scenario_results = []
+    case_results = []
 
     with HttpTransport(
         normalized_base_url,
         max_response_bytes=max_response_bytes,
         transport=httpx_transport,
     ) as transport:
-        for scenario in cases:
+        for test_case in cases:
             execution = execute_scenario_flow(
-                scenario,
+                test_case,
                 config.initial_variables,
                 spec,
                 config,
                 validator,
                 transport,
             )
-            scenario_results.append(aggregate_scenario_result(scenario, execution))
+            case_results.append(aggregate_test_case_result(test_case, execution))
 
     finished_at = _utc_now()
     return aggregate_run_result(
         run_id=actual_run_id,
-        plan_name=run_name,
+        batch_name=run_name,
         spec_id=spec.spec_id,
         started_at=started_at,
         finished_at=finished_at,
         duration_ms=_elapsed_ms(started_timer),
-        scenarios=scenario_results,
+        cases=case_results,
         fault=fault_observation,
     )
 

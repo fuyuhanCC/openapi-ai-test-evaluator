@@ -288,20 +288,20 @@ Unknown operations, extractors, or assertion operators make a plan invalid.
 
 ### 8.4 `RunResult`
 
-`RunResult` is the complete raw execution record for one `TestPlan` run against
-one target and, optionally, one configured fault. It is a single object rather
-than an array. A result contains scenario results; each scenario contains its
-ordered step results and relation results.
+`RunResult` is the complete raw execution record for one `TestCaseBatch` run
+against one target and, optionally, one configured fault. It is a single object
+rather than an array. A result contains test-case results; each test case
+contains its ordered step results and relation results.
 
 The canonical artifact is JSON, but the following equivalent YAML illustrates
-the V1 contract:
+the V2 contract:
 
 ```yaml
-schema_version: "1.0"
+schema_version: "2.0"
 kind: RunResult
 
 run_id: run-20260820-001
-plan_name: lifecycle-scenarios
+batch_name: lifecycle-cases
 spec_id: demo-items-v1
 
 started_at: "2026-08-20T10:00:00.000+08:00"
@@ -314,8 +314,8 @@ fault:
   trigger_status: not_configured
   trigger_count: 0
 
-scenarios:
-  - scenario_id: create-read
+cases:
+  - case_id: create-read
     outcome: passed
 
     steps:
@@ -697,7 +697,7 @@ same name replaces the earlier value. Any non-passing setup or main step halts
 the remaining required steps. This stage returns `ScenarioMainExecution`, an
 explicit intermediate containing step executions, final in-memory variables,
 and the step that caused the halt; it is not exposed as a complete
-`ScenarioResult` until cleanup and relation evaluation have run. Raw variables
+`TestCaseResult` until cleanup and relation evaluation have run. Raw variables
 and exchange objects are excluded from dataclass representations to reduce
 accidental disclosure through diagnostic logging.
 
@@ -716,15 +716,15 @@ Eligible cleanup steps all run in declaration order even if an earlier cleanup
 fails, maximizing isolation between experiments. Successfully extracted cleanup
 values remain available to later cleanup steps. A normal cleanup uses the
 `required` outcome policy; `ignore_errors: true` records `best_effort`. Both
-retain their own actual step outcome, while the eventual scenario aggregator
+retain their own actual step outcome, while the eventual test-case aggregator
 will exclude only best-effort failures from its parent outcome. The combined
 main execution, relation results, and cleanup executions are retained in
-`ScenarioFlowExecution` before aggregation into a final `ScenarioResult`.
+`ScenarioFlowExecution` before aggregation into a final `TestCaseResult`.
 
 The runner classifies failures rather than returning a single generic error.
 Initial categories include:
 
-- `plan_invalid`
+- `case_invalid`
 - `request_build_failed`
 - `transport_error`
 - `timeout`

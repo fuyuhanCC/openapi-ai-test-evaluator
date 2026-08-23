@@ -50,9 +50,9 @@ def test_executes_a_case_batch_without_a_test_plan_input() -> None:
     )
 
     assert result.run_id == "run-case-batch"
-    assert result.plan_name == "model-output"
+    assert result.batch_name == "model-output"
     assert result.outcome is ExecutionOutcome.PASSED
-    assert result.scenarios[0].scenario_id == "generated-case"
+    assert result.cases[0].case_id == "generated-case"
 
 
 def test_validates_cases_against_openapi_before_transport() -> None:

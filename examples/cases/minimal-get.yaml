@@ -1,0 +1,12 @@
+schema_version: "1.0"
+cases:
+  - id: list-items
+    name: List available items
+    tags: [positive, single-operation]
+    steps:
+      - id: list
+        operation_id: listItems
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches

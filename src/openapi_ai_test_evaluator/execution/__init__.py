@@ -58,7 +58,7 @@ from openapi_ai_test_evaluator.execution.response_processor import (
 )
 from openapi_ai_test_evaluator.execution.result_aggregator import (
     aggregate_run_result,
-    aggregate_scenario_result,
+    aggregate_test_case_result,
 )
 from openapi_ai_test_evaluator.execution.scenario_executor import (
     ScenarioFlowExecution,
@@ -118,7 +118,7 @@ __all__ = [
     "adapt_openapi_request",
     "adapt_openapi_response",
     "aggregate_run_result",
-    "aggregate_scenario_result",
+    "aggregate_test_case_result",
     "build_request",
     "build_request_snapshot",
     "build_response_snapshot",

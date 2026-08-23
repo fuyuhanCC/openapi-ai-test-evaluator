@@ -11,10 +11,10 @@ from openapi_ai_test_evaluator.domain.execution import (
     FaultObservation,
     FaultTriggerStatus,
     RunResult,
-    ScenarioResult,
     StepPhase,
     StepResult,
 )
+from openapi_ai_test_evaluator.domain.execution import TestCaseResult as CaseResult
 
 ROOT = Path(__file__).parents[2]
 runner = CliRunner()
@@ -23,10 +23,10 @@ runner = CliRunner()
 def run_result(outcome: ExecutionOutcome = ExecutionOutcome.PASSED) -> RunResult:
     now = datetime(2026, 8, 23, 10, tzinfo=UTC)
     return RunResult(
-        schema_version="1.0",
+        schema_version="2.0",
         kind="RunResult",
         run_id="run-cli",
-        plan_name="minimal-get",
+        batch_name="minimal-get",
         spec_id="demo-items-v1",
         started_at=now,
         finished_at=now,
@@ -37,9 +37,9 @@ def run_result(outcome: ExecutionOutcome = ExecutionOutcome.PASSED) -> RunResult
             trigger_status=FaultTriggerStatus.NOT_CONFIGURED,
             trigger_count=0,
         ),
-        scenarios=[
-            ScenarioResult(
-                scenario_id="list-items",
+        cases=[
+            CaseResult(
+                case_id="list-items",
                 outcome=outcome,
                 steps=[
                     StepResult(
@@ -63,6 +63,154 @@ def run_result(outcome: ExecutionOutcome = ExecutionOutcome.PASSED) -> RunResult
         ],
         errors=[],
     )
+
+
+def test_cases_validate_reports_counts() -> None:
+    cases_path = ROOT / "examples" / "cases" / "minimal-get.yaml"
+
+    result = runner.invoke(app, ["cases", "validate", "--cases", str(cases_path), "--json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == {
+        "valid": True,
+        "path": str(cases_path),
+        "cases": 1,
+        "steps": 1,
+        "relations": 0,
+    }
+
+
+def test_cases_validate_reports_readable_text_counts() -> None:
+    cases_path = ROOT / "examples" / "cases" / "minimal-get.yaml"
+
+    result = runner.invoke(app, ["cases", "validate", "--cases", str(cases_path)])
+
+    assert result.exit_code == 0
+    assert "1 case, 1 step, 0 relations" in result.stdout
+
+
+def test_cases_validate_checks_openapi_semantics() -> None:
+    cases_path = ROOT / "examples" / "cases" / "minimal-get.yaml"
+    spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
+
+    result = runner.invoke(
+        app,
+        [
+            "cases",
+            "validate",
+            "--cases",
+            str(cases_path),
+            "--spec",
+            str(spec_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    output = json.loads(result.stdout)
+    assert output["semantic"] is True
+    assert output["spec_id"] == "demo-items-v1"
+
+
+def test_cases_validate_returns_semantic_issues(tmp_path: Path) -> None:
+    spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
+    cases_path = tmp_path / "unknown-operation.yaml"
+    source = (ROOT / "examples" / "cases" / "minimal-get.yaml").read_text(encoding="utf-8")
+    cases_path.write_text(source.replace("listItems", "missingOperation"), encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "cases",
+            "validate",
+            "--cases",
+            str(cases_path),
+            "--spec",
+            str(spec_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    output = json.loads(result.stdout)
+    assert output["stage"] == "semantic"
+    assert output["issues"][0]["path"] == "cases[0].steps[0].operation_id"
+
+
+def test_cases_validate_rejects_invalid_batch(tmp_path: Path) -> None:
+    cases_path = tmp_path / "empty.yaml"
+    cases_path.write_text('schema_version: "1.0"\ncases: []\n', encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["cases", "validate", "--cases", str(cases_path), "--json"],
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["valid"] is False
+
+
+def test_cases_run_emits_and_writes_complete_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cases_path = ROOT / "examples" / "cases" / "minimal-get.yaml"
+    spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
+    output_path = tmp_path / "run-result.json"
+
+    def fake_execute(*args: object, **kwargs: object) -> RunResult:
+        assert args[2] == "https://example.test/api"
+        assert kwargs["batch_name"] == "minimal-get"
+        return run_result()
+
+    monkeypatch.setattr(
+        "openapi_ai_test_evaluator.cli.app.execute_test_case_batch",
+        fake_execute,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "cases",
+            "run",
+            "--spec",
+            str(spec_path),
+            "--cases",
+            str(cases_path),
+            "--base-url",
+            "https://example.test/api",
+            "--out",
+            str(output_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["kind"] == "RunResult"
+    assert json.loads(output_path.read_text(encoding="utf-8"))["run_id"] == "run-cli"
+
+
+def test_cases_run_rejects_invalid_base_url() -> None:
+    cases_path = ROOT / "examples" / "cases" / "minimal-get.yaml"
+    spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
+
+    result = runner.invoke(
+        app,
+        [
+            "cases",
+            "run",
+            "--spec",
+            str(spec_path),
+            "--cases",
+            str(cases_path),
+            "--base-url",
+            "ftp://example.test/api",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["stage"] == "runner"
 
 
 def test_plan_validate_reports_counts() -> None:

@@ -1,4 +1,4 @@
-"""Strict contracts for deterministic TestPlan execution results."""
+"""Strict contracts for deterministic API test-case execution results."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ class ComparisonOperator(StrEnum):
 
 
 class ErrorCategory(StrEnum):
-    PLAN_INVALID = "plan_invalid"
+    CASE_INVALID = "case_invalid"
     REQUEST_BUILD_FAILED = "request_build_failed"
     TRANSPORT_ERROR = "transport_error"
     TIMEOUT = "timeout"
@@ -299,22 +299,22 @@ class StepResult(ContractModel):
         return self
 
 
-class ScenarioResult(ContractModel):
-    scenario_id: Identifier
+class TestCaseResult(ContractModel):
+    case_id: Identifier
     outcome: ExecutionOutcome
     steps: list[StepResult] = Field(min_length=1)
     relations: list[RelationResult] = Field(default_factory=list)
     errors: list[StructuredError] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_scenario_result(self) -> Self:
+    def validate_test_case_result(self) -> Self:
         step_ids = [step.step_id for step in self.steps]
         if len(step_ids) != len(set(step_ids)):
-            raise ValueError("step IDs must be unique within a scenario result")
+            raise ValueError("step IDs must be unique within a test case result")
 
         relation_ids = [relation.relation_id for relation in self.relations]
         if len(relation_ids) != len(set(relation_ids)):
-            raise ValueError("relation IDs must be unique within a scenario result")
+            raise ValueError("relation IDs must be unique within a test case result")
 
         known_step_ids = set(step_ids)
         for relation in self.relations:
@@ -333,17 +333,17 @@ class ScenarioResult(ContractModel):
 
 
 class RunResult(ContractModel):
-    schema_version: Literal["1.0"]
+    schema_version: Literal["2.0"]
     kind: Literal["RunResult"]
     run_id: Identifier
-    plan_name: Identifier
+    batch_name: Identifier
     spec_id: str = Field(min_length=1)
     started_at: datetime
     finished_at: datetime
     duration_ms: NonNegativeInt
     outcome: ExecutionOutcome
     fault: FaultObservation
-    scenarios: list[ScenarioResult] = Field(min_length=1)
+    cases: list[TestCaseResult] = Field(min_length=1)
     errors: list[StructuredError] = Field(default_factory=list)
 
     @field_validator("started_at", "finished_at")
@@ -357,9 +357,9 @@ class RunResult(ContractModel):
     def validate_run_result(self) -> Self:
         if self.finished_at < self.started_at:
             raise ValueError("finished_at cannot precede started_at")
-        scenario_ids = [scenario.scenario_id for scenario in self.scenarios]
-        if len(scenario_ids) != len(set(scenario_ids)):
-            raise ValueError("scenario IDs must be unique within a run result")
+        case_ids = [case.case_id for case in self.cases]
+        if len(case_ids) != len(set(case_ids)):
+            raise ValueError("case IDs must be unique within a run result")
         _validate_unique_error_ids(self.errors)
         return self
 
