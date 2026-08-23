@@ -48,6 +48,8 @@ class GenerationRecord(ContractModel):
     provider: str = Field(min_length=1)
     model: str | None = Field(default=None, min_length=1)
     prompt_version: str | None = Field(default=None, min_length=1)
+    provider_request_id: str | None = Field(default=None, min_length=1)
+    finish_reason: str | None = Field(default=None, min_length=1)
     started_at: datetime
     finished_at: datetime
     duration_ms: NonNegativeInt
