@@ -24,16 +24,19 @@ class ParameterModel(ContractModel):
     location: ParameterLocation
     required: bool = False
     schema_definition: SchemaDefinition = Field(default_factory=dict)
+    description: str | None = None
 
 
 class RequestBodyModel(ContractModel):
     required: bool = False
     schema_definition: SchemaDefinition | None = None
+    description: str | None = None
 
 
 class ResponseModel(ContractModel):
     status_code: str
     schema_definition: SchemaDefinition | None = None
+    description: str | None = None
 
 
 class OperationModel(ContractModel):
@@ -44,6 +47,8 @@ class OperationModel(ContractModel):
     request_body: RequestBodyModel | None = None
     responses: dict[str, ResponseModel] = Field(default_factory=dict)
     unsupported_reasons: list[str] = Field(default_factory=list)
+    summary: str | None = None
+    description: str | None = None
 
     def parameter(self, location: ParameterLocation, name: str) -> ParameterModel | None:
         """Return a parameter using case-insensitive matching for headers."""
@@ -65,3 +70,4 @@ class OpenAPISpec(ContractModel):
     version: str
     operations: dict[str, OperationModel]
     document: dict[str, Any] = Field(exclude=True)
+    description: str | None = None

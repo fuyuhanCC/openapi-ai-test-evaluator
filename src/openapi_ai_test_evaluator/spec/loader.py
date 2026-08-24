@@ -201,6 +201,7 @@ def _normalize_parameter(document: dict[str, Any], raw_parameter: Any) -> Parame
         location=location,
         required=bool(parameter.get("required", False)),
         schema_definition=copy.deepcopy(schema),
+        description=parameter.get("description"),
     )
 
 
@@ -236,6 +237,7 @@ def _normalize_request_body(
     return RequestBodyModel(
         required=bool(request_body.get("required", False)),
         schema_definition=schema,
+        description=request_body.get("description"),
     ), unsupported
 
 
@@ -253,7 +255,11 @@ def _normalize_responses(
         schema, response_unsupported = _schema_from_content(response.get("content"))
         unsupported.extend(response_unsupported)
         status = str(raw_status)
-        responses[status] = ResponseModel(status_code=status, schema_definition=schema)
+        responses[status] = ResponseModel(
+            status_code=status,
+            schema_definition=schema,
+            description=response.get("description"),
+        )
     return responses, unsupported
 
 
@@ -355,6 +361,8 @@ def _normalize_document(document: dict[str, Any]) -> OpenAPISpec:
                 request_body=request_body,
                 responses=responses,
                 unsupported_reasons=unsupported_reasons,
+                summary=raw_operation.get("summary"),
+                description=raw_operation.get("description"),
             )
 
     return OpenAPISpec(
@@ -364,6 +372,7 @@ def _normalize_document(document: dict[str, Any]) -> OpenAPISpec:
         version=version,
         operations=operations,
         document=document,
+        description=info.get("description"),
     )
 
 

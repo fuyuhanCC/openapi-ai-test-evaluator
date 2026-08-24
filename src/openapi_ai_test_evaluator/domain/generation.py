@@ -14,6 +14,19 @@ NonNegativeInt = Annotated[int, Field(ge=0)]
 NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 
 
+class GenerationConfig(ContractModel):
+    """Reproducible, provider-independent settings for one generation request."""
+
+    model: str = Field(min_length=1)
+    prompt_version: str = Field(min_length=1)
+    max_cases: int = Field(default=20, ge=1, le=100)
+    max_steps_per_case: int = Field(default=5, ge=1, le=20)
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0, allow_inf_nan=False)
+    max_output_tokens: int = Field(default=4096, ge=1)
+    timeout_ms: int = Field(default=60_000, ge=1, le=300_000)
+    seed: int | None = None
+
+
 class GenerationStatus(StrEnum):
     SUCCEEDED = "succeeded"
     INVALID_OUTPUT = "invalid_output"
