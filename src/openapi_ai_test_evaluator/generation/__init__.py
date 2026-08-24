@@ -1,5 +1,11 @@
 """Provider-independent test-case generation boundaries."""
 
+from openapi_ai_test_evaluator.generation.deepseek_provider import (
+    DEEPSEEK_API_KEY_ENV,
+    DEFAULT_DEEPSEEK_BASE_URL,
+    DeepSeekProvider,
+    DeepSeekProviderConfigError,
+)
 from openapi_ai_test_evaluator.generation.fake_provider import FakeProvider
 from openapi_ai_test_evaluator.generation.openapi_context import build_openapi_context
 from openapi_ai_test_evaluator.generation.orchestrator import (
@@ -20,6 +26,10 @@ from openapi_ai_test_evaluator.generation.provider import (
 )
 
 __all__ = [
+    "DEFAULT_DEEPSEEK_BASE_URL",
+    "DEEPSEEK_API_KEY_ENV",
+    "DeepSeekProvider",
+    "DeepSeekProviderConfigError",
     "FakeProvider",
     "GenerationAttempt",
     "LLMProvider",

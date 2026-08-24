@@ -12,7 +12,7 @@ from openapi_ai_test_evaluator.generation import (
 
 def request() -> ProviderRequest:
     return ProviderRequest(
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         system_prompt="Generate API test cases as JSON.",
         user_prompt="Create tests for the listItems operation.",
         response_schema={"type": "object", "properties": {}},
@@ -26,7 +26,7 @@ def request() -> ProviderRequest:
 def response() -> ProviderResponse:
     return ProviderResponse(
         output_text='{"schema_version":"1.0","cases":[]}',
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         request_id="provider-request-1",
         finish_reason="stop",
         token_usage={
@@ -50,7 +50,7 @@ def test_fake_provider_returns_response_and_records_request() -> None:
 
     actual = provider.generate(provider_request)
 
-    assert actual.model == "deepseek-chat"
+    assert actual.model == "deepseek-v4-flash"
     assert actual.token_usage.total_tokens == 120
     assert provider.requests == (provider_request,)
 

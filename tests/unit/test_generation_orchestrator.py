@@ -15,7 +15,7 @@ from openapi_ai_test_evaluator.generation import (
 
 def provider_request() -> ProviderRequest:
     return ProviderRequest(
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         system_prompt="Return only TestCaseBatch JSON.",
         user_prompt="Generate a listItems API test.",
         response_schema={"type": "object"},
@@ -39,7 +39,7 @@ def valid_output() -> str:
 def provider_response(output_text: str = "") -> ProviderResponse:
     return ProviderResponse(
         output_text=output_text or valid_output(),
-        model="deepseek-chat-v4",
+        model="deepseek-v4-flash",
         request_id="provider-request-1",
         finish_reason="stop",
         token_usage={
@@ -68,7 +68,7 @@ def test_generates_validated_batch_and_success_record() -> None:
     assert attempt.batch.cases[0].id == "list-items"
     assert attempt.record.status is GenerationStatus.SUCCEEDED
     assert attempt.record.provider == "deepseek"
-    assert attempt.record.model == "deepseek-chat-v4"
+    assert attempt.record.model == "deepseek-v4-flash"
     assert attempt.record.provider_request_id == "provider-request-1"
     assert attempt.record.token_usage.total_tokens == 125
     assert attempt.record.request_count == 1
@@ -91,7 +91,7 @@ def test_records_invalid_provider_output_without_returning_cases(output_text: st
 
     assert attempt.batch is None
     assert attempt.record.status is GenerationStatus.INVALID_OUTPUT
-    assert attempt.record.model == "deepseek-chat-v4"
+    assert attempt.record.model == "deepseek-v4-flash"
     assert attempt.record.token_usage.total_tokens == 125
     assert attempt.record.error is not None
     assert attempt.record.error.code == "invalid-test-case-batch"
@@ -109,7 +109,7 @@ def test_records_provider_error_without_token_usage() -> None:
 
     assert attempt.batch is None
     assert attempt.record.status is GenerationStatus.PROVIDER_ERROR
-    assert attempt.record.model == "deepseek-chat"
+    assert attempt.record.model == "deepseek-v4-flash"
     assert attempt.record.provider_request_id is None
     assert attempt.record.token_usage.total_tokens is None
     assert attempt.record.error is not None

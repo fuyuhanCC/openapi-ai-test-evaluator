@@ -6,7 +6,7 @@ from openapi_ai_test_evaluator.domain import GenerationConfig
 
 def test_generation_config_has_reproducible_defaults() -> None:
     config = GenerationConfig(
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         prompt_version="api-cases-v1",
     )
 
@@ -20,7 +20,7 @@ def test_generation_config_has_reproducible_defaults() -> None:
 
 def test_generation_config_accepts_common_provider_independent_settings() -> None:
     config = GenerationConfig(
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         prompt_version="api-cases-v2",
         max_cases=12,
         max_steps_per_case=4,
@@ -30,7 +30,7 @@ def test_generation_config_accepts_common_provider_independent_settings() -> Non
         seed=7,
     )
 
-    assert config.model == "deepseek-chat"
+    assert config.model == "deepseek-v4-flash"
     assert config.max_cases == 12
     assert config.seed == 7
 
@@ -52,7 +52,7 @@ def test_generation_config_accepts_common_provider_independent_settings() -> Non
 )
 def test_generation_config_rejects_invalid_bounds(field: str, value: object) -> None:
     raw = {
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "prompt_version": "api-cases-v1",
         field: value,
     }
@@ -64,7 +64,7 @@ def test_generation_config_rejects_invalid_bounds(field: str, value: object) -> 
 @pytest.mark.parametrize("field", ["model", "prompt_version"])
 def test_generation_config_rejects_empty_required_strings(field: str) -> None:
     raw = {
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "prompt_version": "api-cases-v1",
         field: "   ",
     }
@@ -75,7 +75,7 @@ def test_generation_config_rejects_empty_required_strings(field: str) -> None:
 
 def test_generation_config_rejects_credentials_and_vendor_fields() -> None:
     raw = {
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "prompt_version": "api-cases-v1",
         "api_key": "must-not-be-recorded",
         "deepseek_beta_flag": True,

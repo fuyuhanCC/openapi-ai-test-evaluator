@@ -18,7 +18,7 @@ DEMO_SPEC = ROOT / "examples" / "demo-items" / "openapi.yaml"
 
 def config(**overrides: object) -> GenerationConfig:
     values = {
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "prompt_version": PROMPT_VERSION,
         "max_cases": 5,
         "max_steps_per_case": 3,
@@ -34,7 +34,7 @@ def output(cases: list[dict[str, object]]) -> str:
 def response(output_text: str) -> ProviderResponse:
     return ProviderResponse(
         output_text=output_text,
-        model="deepseek-chat",
+        model="deepseek-v4-flash",
         request_id="request-001",
         finish_reason="stop",
         token_usage={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},

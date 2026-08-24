@@ -18,7 +18,7 @@ DEMO_SPEC = ROOT / "examples" / "demo-items" / "openapi.yaml"
 
 def config(**overrides: object) -> GenerationConfig:
     values = {
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "prompt_version": PROMPT_VERSION,
         "max_cases": 12,
         "max_steps_per_case": 4,
@@ -34,7 +34,7 @@ def config(**overrides: object) -> GenerationConfig:
 def test_builds_provider_request_from_generation_config() -> None:
     request = build_provider_request(load_openapi(DEMO_SPEC), config())
 
-    assert request.model == "deepseek-chat"
+    assert request.model == "deepseek-v4-flash"
     assert request.temperature == 0.2
     assert request.max_output_tokens == 8000
     assert request.timeout_ms == 30_000

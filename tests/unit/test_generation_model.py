@@ -12,7 +12,7 @@ def successful_record() -> dict[str, object]:
         "kind": "GenerationRecord",
         "generation_id": "generation-001",
         "provider": "deepseek",
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "prompt_version": "api-cases-v1",
         "started_at": "2026-08-23T10:00:00+08:00",
         "finished_at": "2026-08-23T10:00:01+08:00",
