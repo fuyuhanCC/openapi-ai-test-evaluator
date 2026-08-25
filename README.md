@@ -116,6 +116,18 @@ uv run oate cases run \
   --base-url http://127.0.0.1:8000
 ```
 
+For a deterministic local target, start the FastAPI fixture in a separate
+terminal before running the commands above:
+
+```bash
+uv run uvicorn services.demo_items.app:app --host 127.0.0.1 --port 8000
+```
+
+The fixture implements all six operations in the demo OpenAPI document with an
+in-memory store. `POST /__test__/reset` clears its state and restarts IDs for a
+repeatable run. Generated batches containing mutations still require
+`--allow-mutations` when passed to `oate cases run`.
+
 ## Validate a TestPlan
 
 Check only the generator-independent TestPlan structure:

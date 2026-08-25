@@ -25,14 +25,17 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "fastapi>=0.141.1",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "ruff>=0.16.3",
+    "uvicorn>=0.52.4",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-config --strict-markers"
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
