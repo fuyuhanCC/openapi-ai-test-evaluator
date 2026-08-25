@@ -70,6 +70,15 @@ def generate_cases(
         Path,
         typer.Option("--record-output", file_okay=True, dir_okay=False),
     ],
+    raw_output: Annotated[
+        Path,
+        typer.Option(
+            "--raw-output",
+            file_okay=True,
+            dir_okay=False,
+            help="Store the provider's unvalidated output text when a response is received.",
+        ),
+    ],
     provider: Annotated[
         GenerationProviderChoice,
         typer.Option("--provider", help="Test-case generation provider."),
@@ -115,8 +124,14 @@ def generate_cases(
         typer.Option("--json", help="Emit a machine-readable generation summary."),
     ] = False,
 ) -> None:
-    """Generate a validated TestCaseBatch and a separate GenerationRecord."""
-    _prepare_generation_outputs(cases_output, record_output, overwrite, json_output)
+    """Generate cases while preserving validated, metadata, and raw artifacts."""
+    _prepare_generation_outputs(
+        cases_output,
+        record_output,
+        raw_output,
+        overwrite,
+        json_output,
+    )
 
     actual_generation_id = generation_id or _new_generation_id()
     if re.fullmatch(r"[a-z][a-z0-9-]*", actual_generation_id) is None:
@@ -164,6 +179,11 @@ def generate_cases(
         stage = "provider-config" if isinstance(error, DeepSeekProviderConfigError) else "prompt"
         _report_generation_input_error(stage, error, json_output)
 
+    written_raw_output: Path | None = None
+    if attempt.provider_output_text is not None:
+        _write_generation_artifact(raw_output, attempt.provider_output_text, json_output)
+        written_raw_output = raw_output
+
     _write_generation_artifact(record_output, attempt.record.model_dump_json(indent=2), json_output)
 
     if attempt.batch is None:
@@ -171,6 +191,7 @@ def generate_cases(
             attempt.record,
             cases_output=None,
             record_output=record_output,
+            raw_output=written_raw_output,
         )
         _emit_generation_summary(summary, json_output)
         raise typer.Exit(code=1)
@@ -180,6 +201,7 @@ def generate_cases(
         attempt.record,
         cases_output=cases_output,
         record_output=record_output,
+        raw_output=written_raw_output,
         case_count=len(attempt.batch.cases),
     )
     _emit_generation_summary(summary, json_output)
@@ -197,16 +219,18 @@ def _new_generation_id() -> str:
 def _prepare_generation_outputs(
     cases_output: Path,
     record_output: Path,
+    raw_output: Path,
     overwrite: bool,
     json_output: bool,
 ) -> None:
-    if cases_output.resolve() == record_output.resolve():
+    outputs = (cases_output, record_output, raw_output)
+    if len({path.resolve() for path in outputs}) != len(outputs):
         _report_generation_input_error(
             "artifacts",
-            ValueError("cases-output and record-output must be different files"),
+            ValueError("cases-output, record-output, and raw-output must be different files"),
             json_output,
         )
-    existing = [path for path in (cases_output, record_output) if path.exists()]
+    existing = [path for path in outputs if path.exists()]
     if existing and not overwrite:
         paths = ", ".join(str(path) for path in existing)
         _report_generation_input_error(
@@ -215,8 +239,8 @@ def _prepare_generation_outputs(
             json_output,
         )
     try:
-        cases_output.parent.mkdir(parents=True, exist_ok=True)
-        record_output.parent.mkdir(parents=True, exist_ok=True)
+        for path in outputs:
+            path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as error:
         _report_generation_input_error("artifacts", error, json_output)
 
@@ -233,6 +257,7 @@ def _generation_summary(
     *,
     cases_output: Path | None,
     record_output: Path,
+    raw_output: Path | None,
     case_count: int | None = None,
 ) -> dict[str, object]:
     summary: dict[str, object] = {
@@ -244,6 +269,8 @@ def _generation_summary(
     }
     if cases_output is not None:
         summary["cases_output"] = str(cases_output)
+    if raw_output is not None:
+        summary["raw_output"] = str(raw_output)
     if case_count is not None:
         summary["cases"] = case_count
     if record.error is not None:
@@ -257,16 +284,22 @@ def _emit_generation_summary(summary: dict[str, object], json_output: bool) -> N
         return
     status = summary["status"]
     if status == "succeeded":
+        destinations = [summary["cases_output"], summary["record_output"]]
+        if "raw_output" in summary:
+            destinations.append(summary["raw_output"])
         typer.echo(
             f"Generation {summary['generation_id']}: succeeded "
             f"({_count_label(summary['cases'], 'case')}); "
-            f"wrote {summary['cases_output']} and {summary['record_output']}"
+            f"wrote {', '.join(str(path) for path in destinations)}"
         )
     else:
         error = summary.get("error")
+        destinations = [summary["record_output"]]
+        if "raw_output" in summary:
+            destinations.append(summary["raw_output"])
         typer.echo(
             f"Generation {summary['generation_id']}: {status}; "
-            f"wrote {summary['record_output']}; error={error}",
+            f"wrote {', '.join(str(path) for path in destinations)}; error={error}",
             err=True,
         )
 

@@ -58,6 +58,65 @@ def test_builds_deterministic_json_instructions() -> None:
     }
 
 
+def test_latest_prompt_makes_total_step_limit_explicit() -> None:
+    request = build_provider_request(load_openapi(DEMO_SPEC), config())
+    requirements = json.loads(request.user_prompt)["requirements"]
+
+    assert any(
+        "combined number of setup, steps, and cleanup" in requirement
+        and "cleanup counts toward this hard limit" in requirement
+        for requirement in requirements
+    )
+
+
+def test_latest_prompt_demonstrates_object_variable_references() -> None:
+    request = build_provider_request(load_openapi(DEMO_SPEC), config())
+    instructions = json.loads(request.user_prompt)
+
+    assert instructions["variable_reference_example"] == {
+        "producer_extract": [
+            {
+                "variable": "item_id",
+                "source": "response.body",
+                "pointer": "/id",
+            }
+        ],
+        "later_request": {"path": {"itemId": {"$var": "item_id"}}},
+    }
+    assert any(
+        "never encode a variable reference as a string" in requirement
+        for requirement in instructions["requirements"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("prompt_version", "has_step_rule"),
+    [("api-cases-v1", False), ("api-cases-v2", True)],
+)
+def test_previous_prompt_versions_remain_reproducible(
+    prompt_version: str,
+    has_step_rule: bool,
+) -> None:
+    request = build_provider_request(
+        load_openapi(DEMO_SPEC),
+        config(prompt_version=prompt_version),
+    )
+    instructions = json.loads(request.user_prompt)
+
+    assert instructions["prompt_version"] == prompt_version
+    assert (
+        any(
+            "cleanup counts toward this hard limit" in item for item in instructions["requirements"]
+        )
+        is has_step_rule
+    )
+    assert "variable_reference_example" not in instructions
+    assert all(
+        "never encode a variable reference as a string" not in item
+        for item in instructions["requirements"]
+    )
+
+
 def test_prompt_contains_real_operations_and_omits_server_address() -> None:
     request = build_provider_request(load_openapi(DEMO_SPEC), config())
     instructions = json.loads(request.user_prompt)

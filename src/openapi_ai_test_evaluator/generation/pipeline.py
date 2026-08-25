@@ -39,13 +39,13 @@ def generate_cases_from_openapi(
 
     limit_error = _generation_limit_error(attempt.batch, config)
     if limit_error is not None:
-        return _invalid_attempt(attempt.record, limit_error)
+        return _invalid_attempt(attempt, limit_error)
 
     semantic_issues = validate_test_case_batch_semantics(attempt.batch, spec)
     if semantic_issues:
         issue_codes = ", ".join(sorted({issue.code for issue in semantic_issues}))
         return _invalid_attempt(
-            attempt.record,
+            attempt,
             GenerationError(
                 code="semantic-validation-failed",
                 message=(
@@ -84,8 +84,8 @@ def _generation_limit_error(
     return None
 
 
-def _invalid_attempt(record: GenerationRecord, error: GenerationError) -> GenerationAttempt:
-    raw_record = record.model_dump()
+def _invalid_attempt(attempt: GenerationAttempt, error: GenerationError) -> GenerationAttempt:
+    raw_record = attempt.record.model_dump()
     raw_record.update(
         {
             "status": GenerationStatus.INVALID_OUTPUT,
@@ -95,4 +95,5 @@ def _invalid_attempt(record: GenerationRecord, error: GenerationError) -> Genera
     return GenerationAttempt(
         record=GenerationRecord.model_validate(raw_record),
         batch=None,
+        provider_output_text=attempt.provider_output_text,
     )

@@ -73,6 +73,7 @@ def test_generates_validated_batch_and_success_record() -> None:
     assert attempt.record.token_usage.total_tokens == 125
     assert attempt.record.request_count == 1
     assert attempt.record.error is None
+    assert attempt.provider_output_text == valid_output()
     assert provider.requests == (provider_request(),)
 
 
@@ -97,6 +98,7 @@ def test_records_invalid_provider_output_without_returning_cases(output_text: st
     assert attempt.record.error.code == "invalid-test-case-batch"
     assert attempt.record.error.retryable is True
     assert output_text not in attempt.record.error.message
+    assert attempt.provider_output_text == output_text
 
 
 def test_records_provider_error_without_token_usage() -> None:
@@ -115,6 +117,7 @@ def test_records_provider_error_without_token_usage() -> None:
     assert attempt.record.error is not None
     assert attempt.record.error.code == "rate-limited"
     assert attempt.record.error.retryable is True
+    assert attempt.provider_output_text is None
 
 
 def test_attempt_rejects_batch_status_mismatch() -> None:

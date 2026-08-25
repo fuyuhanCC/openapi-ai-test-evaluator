@@ -15,6 +15,7 @@ from openapi_ai_test_evaluator.generation.orchestrator import (
 from openapi_ai_test_evaluator.generation.pipeline import generate_cases_from_openapi
 from openapi_ai_test_evaluator.generation.prompt_builder import (
     PROMPT_VERSION,
+    SUPPORTED_PROMPT_VERSIONS,
     PromptBuildError,
     build_provider_request,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "ProviderRequest",
     "ProviderResponse",
     "PROMPT_VERSION",
+    "SUPPORTED_PROMPT_VERSIONS",
     "PromptBuildError",
     "build_openapi_context",
     "build_provider_request",

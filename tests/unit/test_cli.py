@@ -74,6 +74,7 @@ def test_cases_generate_writes_cases_and_generation_record_with_mock_http(
     spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
     cases_output = tmp_path / "cases" / "deepseek.json"
     record_output = tmp_path / "generations" / "deepseek.json"
+    raw_output = tmp_path / "raw" / "deepseek.txt"
     captured: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -104,6 +105,8 @@ def test_cases_generate_writes_cases_and_generation_record_with_mock_http(
                 str(cases_output),
                 "--record-output",
                 str(record_output),
+                "--raw-output",
+                str(raw_output),
                 "--json",
             ],
         )
@@ -113,6 +116,7 @@ def test_cases_generate_writes_cases_and_generation_record_with_mock_http(
     assert summary["status"] == "succeeded"
     assert summary["cases"] == 1
     assert summary["cases_output"] == str(cases_output)
+    assert summary["raw_output"] == str(raw_output)
     assert captured["url"] == "https://api.deepseek.com/chat/completions"
     body = captured["body"]
     assert isinstance(body, dict)
@@ -124,6 +128,7 @@ def test_cases_generate_writes_cases_and_generation_record_with_mock_http(
     assert saved_record["kind"] == "GenerationRecord"
     assert saved_record["generation_id"] == "generation-cli"
     assert saved_record["token_usage"]["total_tokens"] == 120
+    assert raw_output.read_text(encoding="utf-8") == f"{generated_list_case_batch()}\n"
 
 
 def test_cases_generate_writes_failure_record_but_not_cases(
@@ -133,6 +138,7 @@ def test_cases_generate_writes_failure_record_but_not_cases(
     spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
     cases_output = tmp_path / "cases.json"
     record_output = tmp_path / "record.json"
+    raw_output = tmp_path / "raw.txt"
 
     with httpx.Client(
         transport=httpx.MockTransport(lambda request: deepseek_response("{}"))
@@ -155,13 +161,18 @@ def test_cases_generate_writes_failure_record_but_not_cases(
                 str(cases_output),
                 "--record-output",
                 str(record_output),
+                "--raw-output",
+                str(raw_output),
                 "--json",
             ],
         )
 
     assert result.exit_code == 1
-    assert json.loads(result.stdout)["status"] == "invalid_output"
+    summary = json.loads(result.stdout)
+    assert summary["status"] == "invalid_output"
+    assert summary["raw_output"] == str(raw_output)
     assert not cases_output.exists()
+    assert raw_output.read_text(encoding="utf-8") == "{}\n"
     saved_record = json.loads(record_output.read_text(encoding="utf-8"))
     assert saved_record["status"] == "invalid_output"
     assert saved_record["error"]["code"] == "invalid-test-case-batch"
@@ -185,6 +196,8 @@ def test_cases_generate_reports_missing_api_key_without_network(
             str(tmp_path / "cases.json"),
             "--record-output",
             str(tmp_path / "record.json"),
+            "--raw-output",
+            str(tmp_path / "raw.txt"),
             "--json",
         ],
     )
@@ -194,6 +207,7 @@ def test_cases_generate_reports_missing_api_key_without_network(
     assert summary["status"] == "not_started"
     assert summary["stage"] == "provider-config"
     assert "DEEPSEEK_API_KEY" in summary["error"]
+    assert not (tmp_path / "raw.txt").exists()
 
 
 def test_cases_generate_refuses_to_overwrite_before_provider_call(
@@ -203,6 +217,7 @@ def test_cases_generate_refuses_to_overwrite_before_provider_call(
     spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
     cases_output = tmp_path / "cases.json"
     record_output = tmp_path / "record.json"
+    raw_output = tmp_path / "raw.txt"
     cases_output.write_text("keep-me", encoding="utf-8")
     provider_created = False
 
@@ -226,6 +241,8 @@ def test_cases_generate_refuses_to_overwrite_before_provider_call(
             str(cases_output),
             "--record-output",
             str(record_output),
+            "--raw-output",
+            str(raw_output),
             "--json",
         ],
     )

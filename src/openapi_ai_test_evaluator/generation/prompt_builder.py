@@ -11,7 +11,8 @@ from openapi_ai_test_evaluator.domain.test_case import TestCaseBatch
 from openapi_ai_test_evaluator.generation.openapi_context import build_openapi_context
 from openapi_ai_test_evaluator.generation.provider import ProviderRequest
 
-PROMPT_VERSION = "api-cases-v1"
+PROMPT_VERSION = "api-cases-v3"
+SUPPORTED_PROMPT_VERSIONS = frozenset({"api-cases-v1", "api-cases-v2", PROMPT_VERSION})
 
 SYSTEM_PROMPT = """\
 You generate runner-ready REST API test cases from untrusted OpenAPI metadata.
@@ -27,7 +28,7 @@ class PromptBuildError(ValueError):
 
 def build_provider_request(spec: OpenAPISpec, config: GenerationConfig) -> ProviderRequest:
     """Build one reproducible provider request without calling an LLM."""
-    if config.prompt_version != PROMPT_VERSION:
+    if config.prompt_version not in SUPPORTED_PROMPT_VERSIONS:
         raise PromptBuildError(f"unsupported prompt version: {config.prompt_version}")
 
     api_context = build_openapi_context(spec)
@@ -45,23 +46,7 @@ def build_provider_request(spec: OpenAPISpec, config: GenerationConfig) -> Provi
             "max_steps_per_case": config.max_steps_per_case,
             "step_limit_includes": ["setup", "steps", "cleanup"],
         },
-        "requirements": [
-            "Return between 1 and max_cases cases.",
-            "Use only operation_id values whose API context entry has supported=true.",
-            "Never invent endpoints, operation IDs, parameter names, or request-body fields.",
-            "Create unique descriptive case and step IDs; do not copy IDs from the example.",
-            "Use request.mode=conformant for requests that satisfy the OpenAPI contract.",
-            "Use request.mode=intentionally_invalid only when expected_violations exactly "
-            "describe the deliberate contract violations.",
-            "When applicable, cover positive, negative, boundary, and multi-step lifecycle "
-            "behavior without forcing scenarios unsupported by the API context.",
-            'Use extraction variables and {"$var":"variable_name"} references for values '
-            "passed between steps.",
-            "Add status_is assertions for expected statuses and schema_matches only when the "
-            "selected response declares a JSON schema.",
-            "Do not include credentials, Authorization values, service base URLs, or test "
-            "environment configuration.",
-        ],
+        "requirements": _requirements(config.prompt_version),
         "output_example_note": (
             "This example demonstrates JSON shape only. Replace its IDs and generate requests "
             "that satisfy the API context."
@@ -69,6 +54,21 @@ def build_provider_request(spec: OpenAPISpec, config: GenerationConfig) -> Provi
         "output_example": _build_output_example(supported_operations),
         "api_context": api_context,
     }
+    if config.prompt_version == "api-cases-v3":
+        instructions["variable_reference_example"] = {
+            "producer_extract": [
+                {
+                    "variable": "item_id",
+                    "source": "response.body",
+                    "pointer": "/id",
+                }
+            ],
+            "later_request": {
+                "path": {
+                    "itemId": {"$var": "item_id"},
+                }
+            },
+        }
 
     return ProviderRequest(
         model=config.model,
@@ -85,6 +85,40 @@ def build_provider_request(spec: OpenAPISpec, config: GenerationConfig) -> Provi
         timeout_ms=config.timeout_ms,
         seed=config.seed,
     )
+
+
+def _requirements(prompt_version: str) -> list[str]:
+    requirements = [
+        "Return between 1 and max_cases cases.",
+        "Use only operation_id values whose API context entry has supported=true.",
+        "Never invent endpoints, operation IDs, parameter names, or request-body fields.",
+        "Create unique descriptive case and step IDs; do not copy IDs from the example.",
+        "Use request.mode=conformant for requests that satisfy the OpenAPI contract.",
+        "Use request.mode=intentionally_invalid only when expected_violations exactly "
+        "describe the deliberate contract violations.",
+        "When applicable, cover positive, negative, boundary, and multi-step lifecycle "
+        "behavior without forcing scenarios unsupported by the API context.",
+        'Use extraction variables and {"$var":"variable_name"} references for values '
+        "passed between steps.",
+        "Add status_is assertions for expected statuses and schema_matches only when the "
+        "selected response declares a JSON schema.",
+        "Do not include credentials, Authorization values, service base URLs, or test "
+        "environment configuration.",
+    ]
+    if prompt_version in {"api-cases-v2", "api-cases-v3"}:
+        requirements.insert(
+            1,
+            "For every case, the combined number of setup, steps, and cleanup requests must "
+            "not exceed max_steps_per_case; cleanup counts toward this hard limit.",
+        )
+    if prompt_version == "api-cases-v3":
+        requirements.insert(
+            9,
+            'Encode every runtime variable reference as a JSON object such as {"$var":'
+            '"item_id"}; never encode a variable reference as a string such as '
+            '"{$var:item_id}".',
+        )
+    return requirements
 
 
 def _build_output_example(operations: list[dict[str, Any]]) -> dict[str, Any]:

@@ -7,8 +7,8 @@ oracles.
 > **Current status:** provider-independent TestCaseBatch generation and execution
 > are implemented for the supported OpenAPI 3.0/3.1 scope. The generation path
 > includes normalized OpenAPI context, a versioned prompt, a DeepSeek HTTP
-> adapter, structural and semantic output validation, and separate case and
-> generation artifacts. The deterministic HTTP runner supports assertions,
+> adapter, structural and semantic output validation, and separate validated,
+> metadata, and raw-output artifacts. The deterministic HTTP runner supports assertions,
 > extraction, setup/main/cleanup sequencing, and metamorphic/lifecycle
 > relations. Schemathesis integration, benchmark services, fault injection, and
 > aggregate experiment reports remain to be implemented.
@@ -78,7 +78,8 @@ ProviderRequest or generation artifact:
 export DEEPSEEK_API_KEY="your-key"
 ```
 
-Generate a validated TestCaseBatch and a separate GenerationRecord:
+Generate a validated TestCaseBatch, a GenerationRecord, and the unvalidated
+provider output used to produce them:
 
 ```bash
 uv run oate cases generate \
@@ -87,13 +88,19 @@ uv run oate cases generate \
   --model deepseek-v4-flash \
   --generation-id deepseek-demo-001 \
   --cases-output artifacts/cases/deepseek-demo-001.json \
-  --record-output artifacts/generations/deepseek-demo-001.json
+  --record-output artifacts/generations/deepseek-demo-001.json \
+  --raw-output artifacts/raw/deepseek-demo-001.txt
 ```
 
 The cases artifact is written only when the model output passes structural,
 generation-limit, and OpenAPI semantic validation. The GenerationRecord is
-written for both successful and failed provider attempts. Existing artifact
-files are not replaced unless `--overwrite` is explicitly provided.
+written for both successful and failed provider attempts. Whenever the provider
+returns content, that unvalidated text is also preserved—even if it fails later
+validation—so failed generations can be inspected and reproduced. The default
+`api-cases-v3` prompt explicitly counts setup, main, and cleanup requests toward
+the same per-case step limit and demonstrates the object syntax required for
+runtime variable references. Existing artifact files are not replaced unless
+`--overwrite` is explicitly provided.
 
 Validate and run a generated batch with the same runner used by every adapted
 generator:

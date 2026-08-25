@@ -30,6 +30,7 @@ class GenerationAttempt:
 
     record: GenerationRecord
     batch: TestCaseBatch | None
+    provider_output_text: str | None = None
 
     def __post_init__(self) -> None:
         succeeded = self.record.status is GenerationStatus.SUCCEEDED
@@ -66,6 +67,7 @@ def generate_test_case_batch(
                 ),
             ),
             batch=None,
+            provider_output_text=None,
         )
 
     try:
@@ -93,6 +95,7 @@ def generate_test_case_batch(
                 ),
             ),
             batch=None,
+            provider_output_text=response.output_text,
         )
 
     return GenerationAttempt(
@@ -109,6 +112,7 @@ def generate_test_case_batch(
             token_usage=response.token_usage,
         ),
         batch=batch,
+        provider_output_text=response.output_text,
     )
 
 

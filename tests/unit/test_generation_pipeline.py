@@ -74,6 +74,7 @@ def test_runs_complete_generation_pipeline_with_fake_provider() -> None:
     assert attempt.record.status is GenerationStatus.SUCCEEDED
     assert attempt.record.prompt_version == PROMPT_VERSION
     assert attempt.record.token_usage.total_tokens == 120
+    assert attempt.provider_output_text == output([list_case()])
     assert provider.requests == (build_provider_request(spec, generation_config),)
 
 
@@ -94,6 +95,7 @@ def test_rejects_more_cases_than_generation_config_allows() -> None:
     assert attempt.record.error is not None
     assert attempt.record.error.code == "generation-limits-exceeded"
     assert "2 cases; maximum is 1" in attempt.record.error.message
+    assert attempt.provider_output_text is not None
 
 
 def test_rejects_case_with_too_many_total_steps() -> None:
@@ -113,6 +115,7 @@ def test_rejects_case_with_too_many_total_steps() -> None:
     assert attempt.record.error is not None
     assert attempt.record.error.code == "generation-limits-exceeded"
     assert "3 total steps; maximum is 2" in attempt.record.error.message
+    assert attempt.provider_output_text == output([case])
 
 
 def test_rejects_structurally_valid_cases_that_invent_operations() -> None:
@@ -134,3 +137,4 @@ def test_rejects_structurally_valid_cases_that_invent_operations() -> None:
     assert attempt.record.error is not None
     assert attempt.record.error.code == "semantic-validation-failed"
     assert "unknown_operation" in attempt.record.error.message
+    assert attempt.provider_output_text == output([invented_case])
