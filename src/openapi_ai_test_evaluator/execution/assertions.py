@@ -65,6 +65,17 @@ def _execute_assertion(
             actual == expected,
         )
 
+    if assertion.operator is AssertionOperator.STATUS_IN:
+        actual = response.raw.status_code
+        expected = cast(list[JsonValue], assertion.expected)
+        return _predicate_result(
+            assertion_id,
+            assertion,
+            actual,
+            expected,
+            actual in expected,
+        )
+
     if assertion.operator is AssertionOperator.SCHEMA_MATCHES:
         issues = _contract_assertion_issues(response)
         return AssertionResult(

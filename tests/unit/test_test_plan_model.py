@@ -97,6 +97,47 @@ def test_distinguishes_explicit_json_null_from_missing_expected_value() -> None:
         )
 
 
+def test_preserves_absent_body_and_explicit_json_null_during_serialization() -> None:
+    absent = PlanModel.model_validate(minimal_plan())
+    explicit_null_data = minimal_plan()
+    scenarios = explicit_null_data["scenarios"]
+    assert isinstance(scenarios, list)
+    scenarios[0]["steps"][0]["request"] = {"body": None}
+    explicit_null = PlanModel.model_validate(explicit_null_data)
+
+    absent_request = absent.model_dump(mode="json")["scenarios"][0]["steps"][0]["request"]
+    null_request = explicit_null.model_dump(mode="json")["scenarios"][0]["steps"][0]["request"]
+
+    assert "body" not in absent_request
+    assert null_request["body"] is None
+    assert absent.scenarios[0].steps[0].request.body_present is False
+    assert explicit_null.scenarios[0].steps[0].request.body_present is True
+
+
+def test_accepts_a_non_empty_unique_status_set() -> None:
+    assertion = Assertion.model_validate(
+        {
+            "operator": "status_in",
+            "expected": [400, 422],
+        }
+    )
+
+    assert assertion.expected == [400, 422]
+
+
+@pytest.mark.parametrize(
+    ("expected", "message"),
+    [
+        ([], "non-empty list"),
+        ([400, True], "integer status codes"),
+        ([400, 400], "must be unique"),
+    ],
+)
+def test_rejects_invalid_status_sets(expected: object, message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Assertion.model_validate({"operator": "status_in", "expected": expected})
+
+
 def test_enforces_selector_pointer_by_response_source() -> None:
     with pytest.raises(ValidationError, match="response.headers selectors require"):
         Assertion.model_validate(

@@ -14,7 +14,10 @@ from openapi_ai_test_evaluator.domain.execution import (
     RequestSnapshot,
     ResponseSnapshot,
 )
-from openapi_ai_test_evaluator.execution.request_builder import PreparedRequest
+from openapi_ai_test_evaluator.execution.request_builder import (
+    PreparedRequest,
+    encode_json_body,
+)
 from openapi_ai_test_evaluator.execution.transport import TransportResponse
 
 REDACTED_VALUE = "[REDACTED]"
@@ -45,7 +48,7 @@ _SENSITIVE_NAMES = frozenset(
 def build_request_snapshot(request: PreparedRequest) -> RequestSnapshot:
     """Create a safe artifact snapshot from a resolved logical request."""
     media_type = _request_media_type(request)
-    if request.json_body is None:
+    if not request.has_json_body:
         body = BodySnapshot(
             media_type=None,
             value=None,
@@ -56,12 +59,12 @@ def build_request_snapshot(request: PreparedRequest) -> RequestSnapshot:
         body = BodySnapshot(
             media_type=media_type,
             value=sanitize_json_value(request.json_body),
-            size_bytes=len(_canonical_json_bytes(request.json_body)),
+            size_bytes=len(encode_json_body(request) or b""),
             truncated=False,
         )
 
     headers = _sanitize_headers(request.headers.items())
-    if request.json_body is not None and "content-type" not in headers:
+    if request.has_json_body and "content-type" not in headers:
         headers["content-type"] = media_type or "application/json"
 
     return RequestSnapshot(
@@ -95,20 +98,11 @@ def build_response_snapshot(response: TransportResponse) -> ResponseSnapshot:
     )
 
 
-def _canonical_json_bytes(value: JsonValue) -> bytes:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        allow_nan=False,
-        separators=(",", ":"),
-    ).encode("utf-8")
-
-
 def _request_media_type(request: PreparedRequest) -> str | None:
     for name, value in request.headers.items():
         if name.casefold() == "content-type":
             return _normalized_media_type(value)
-    return "application/json" if request.json_body is not None else None
+    return "application/json" if request.has_json_body else None
 
 
 def _response_media_type(headers: Iterable[tuple[str, str]]) -> str | None:

@@ -114,6 +114,20 @@ def test_maps_a_failed_status_assertion_to_a_step_failure() -> None:
     assert execution.result.errors[0].assertion_id == "assertion-1"
 
 
+def test_maps_a_failed_status_membership_assertion_to_a_step_failure() -> None:
+    step = create_step(
+        assertions=[{"operator": "status_in", "expected": [400, 422]}],
+    )
+
+    execution = run_step(
+        step,
+        httpx.MockTransport(lambda request: httpx.Response(201, json=valid_item())),
+    )
+
+    assert execution.result.outcome is ExecutionOutcome.FAILED
+    assert execution.result.errors[0].category is ErrorCategory.UNEXPECTED_STATUS
+
+
 def test_required_missing_extraction_fails_the_step() -> None:
     step = create_step(
         extract=[

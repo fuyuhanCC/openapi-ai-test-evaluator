@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -34,6 +35,7 @@ class PreparedRequest:
     path_parameters: tuple[tuple[str, str], ...]
     query: tuple[tuple[str, str], ...]
     headers: Mapping[str, str]
+    has_json_body: bool
     json_body: JsonValue | None
     timeout_ms: int
 
@@ -82,7 +84,7 @@ def build_request(
     )
     body = (
         _resolve_runtime_value(step.request.body, variables, "request.body")
-        if step.request.body is not None
+        if step.request.body_present
         else None
     )
 
@@ -93,9 +95,22 @@ def build_request(
         path_parameters=path_parameters,
         query=query,
         headers=headers,
+        has_json_body=step.request.body_present,
         json_body=body,
         timeout_ms=defaults.timeout_ms,
     )
+
+
+def encode_json_body(request: PreparedRequest) -> bytes | None:
+    """Encode an explicitly present JSON body while preserving JSON null."""
+    if not request.has_json_body:
+        return None
+    return json.dumps(
+        request.json_body,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
 
 
 def _resolve_runtime_value(

@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
-from pydantic import Field, JsonValue, field_validator, model_validator
+from pydantic import (
+    Field,
+    JsonValue,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from openapi_ai_test_evaluator.domain.contracts import (
     ContractModel,
@@ -33,6 +40,7 @@ class ViolationCode(StrEnum):
 
 class AssertionOperator(StrEnum):
     STATUS_IS = "status_is"
+    STATUS_IN = "status_in"
     SCHEMA_MATCHES = "schema_matches"
     EQUALS = "equals"
     NOT_EQUALS = "not_equals"
@@ -116,6 +124,21 @@ class RequestDefinition(ContractModel):
     headers: dict[str, JsonValue] = Field(default_factory=dict)
     body: JsonValue | None = None
 
+    @property
+    def body_present(self) -> bool:
+        """Whether the input explicitly included a JSON body, including null."""
+        return "body" in self.model_fields_set
+
+    @model_serializer(mode="wrap")
+    def preserve_body_presence(
+        self,
+        handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        serialized = handler(self)
+        if not self.body_present:
+            serialized.pop("body", None)
+        return serialized
+
     @field_validator("path", "headers")
     @classmethod
     def validate_parameter_values(cls, values: dict[str, JsonValue]) -> dict[str, JsonValue]:
@@ -184,6 +207,21 @@ class Assertion(ContractModel):
                 or isinstance(self.expected, bool)
             ):
                 raise ValueError("status_is requires an integer expected value")
+        elif self.operator is AssertionOperator.STATUS_IN:
+            if self.actual is not None:
+                raise ValueError("status_in does not accept an actual selector")
+            valid_statuses = (
+                isinstance(self.expected, list)
+                and bool(self.expected)
+                and all(
+                    isinstance(status, int) and not isinstance(status, bool)
+                    for status in self.expected
+                )
+            )
+            if not valid_statuses:
+                raise ValueError("status_in requires a non-empty list of integer status codes")
+            if len(self.expected) != len(set(self.expected)):
+                raise ValueError("status_in status codes must be unique")
         elif self.operator is AssertionOperator.SCHEMA_MATCHES:
             if self.actual is not None or self.expected is not None:
                 raise ValueError("schema_matches does not accept actual or expected")

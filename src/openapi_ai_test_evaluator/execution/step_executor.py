@@ -276,7 +276,7 @@ def _evaluation_errors(
 def _assertion_error_location(
     assertion: Assertion,
 ) -> tuple[ErrorCategory, str, str | None]:
-    if assertion.operator is AssertionOperator.STATUS_IS:
+    if assertion.operator in {AssertionOperator.STATUS_IS, AssertionOperator.STATUS_IN}:
         return ErrorCategory.UNEXPECTED_STATUS, "response.status", None
     if assertion.operator is AssertionOperator.SCHEMA_MATCHES:
         return ErrorCategory.RESPONSE_SCHEMA_MISMATCH, "response.body", None

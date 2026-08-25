@@ -5,9 +5,13 @@ import pytest
 from pydantic import ValidationError
 
 from openapi_ai_test_evaluator.domain import TestPlan as PlanModel
-from openapi_ai_test_evaluator.domain.test_plan import RelationKind
+from openapi_ai_test_evaluator.domain.test_plan import RelationKind, RequestStep
 from openapi_ai_test_evaluator.spec import load_openapi
-from openapi_ai_test_evaluator.validation import load_test_plan, validate_plan_semantics
+from openapi_ai_test_evaluator.validation import (
+    detect_request_violations,
+    load_test_plan,
+    validate_plan_semantics,
+)
 
 ROOT = Path(__file__).parents[2]
 PLAN_DIR = ROOT / "examples" / "plans"
@@ -137,6 +141,19 @@ def test_reports_undeclared_response_status() -> None:
     assert "undeclared_response_status" in {issue.code for issue in issues}
 
 
+def test_reports_undeclared_response_status_inside_status_set() -> None:
+    plan_data = _minimal_plan_data()
+    assertions = _first_step(plan_data)["assertions"]
+    assert isinstance(assertions, list)
+    assertions[0] = {"operator": "status_in", "expected": [200, 418]}
+
+    issues = validate_plan_semantics(PlanModel.model_validate(plan_data), SPEC)
+
+    undeclared = [issue for issue in issues if issue.code == "undeclared_response_status"]
+    assert len(undeclared) == 1
+    assert "418" in undeclared[0].message
+
+
 def test_reports_conformant_request_schema_violation() -> None:
     plan_data = deepcopy(load_test_plan(PLAN_DIR / "all-methods.yaml").model_dump(mode="json"))
     create_step = _first_step(plan_data)
@@ -244,6 +261,80 @@ def test_reports_false_and_undeclared_negative_intent() -> None:
     assert "undeclared_request_violation" in codes
 
 
+def test_detects_expected_violations_for_a_concrete_negative_request() -> None:
+    step = RequestStep.model_validate(
+        {
+            "id": "generated-create",
+            "operation_id": "createItem",
+            "request": {
+                "body": {
+                    "name": "",
+                    "price": "free",
+                }
+            },
+        }
+    )
+
+    report = detect_request_violations(step, SPEC)
+
+    assert report.issues == ()
+    assert [
+        (violation.code.value, violation.location, violation.field)
+        for violation in report.violations
+    ] == [
+        ("missing_required", "body", "status"),
+        ("out_of_range", "body", "name"),
+        ("type_mismatch", "body", "price"),
+    ]
+
+
+def test_request_violation_detection_reports_non_inferable_input() -> None:
+    step = RequestStep.model_validate(
+        {
+            "id": "generated-list",
+            "operation_id": "listItems",
+            "request": {"query": [{"name": "surprise", "value": "yes"}]},
+        }
+    )
+
+    report = detect_request_violations(step, SPEC)
+
+    assert report.violations == ()
+    assert [issue.code for issue in report.issues] == ["unknown_parameter"]
+    assert report.issues[0].path == "step.request.query.surprise"
+
+
+def test_request_violation_detection_distinguishes_missing_and_null_body() -> None:
+    missing = RequestStep(id="missing-body", operation_id="createItem")
+    explicit_null = RequestStep.model_validate(
+        {
+            "id": "null-body",
+            "operation_id": "createItem",
+            "request": {"body": None},
+        }
+    )
+
+    missing_report = detect_request_violations(missing, SPEC)
+    null_report = detect_request_violations(explicit_null, SPEC)
+
+    assert [violation.model_dump(mode="json") for violation in missing_report.violations] == [
+        {"code": "missing_required", "location": "body", "field": "$body"}
+    ]
+    assert [violation.model_dump(mode="json") for violation in null_report.violations] == [
+        {"code": "type_mismatch", "location": "body", "field": "$body"}
+    ]
+
+
+def test_request_violation_detection_reports_unknown_operation() -> None:
+    report = detect_request_violations(
+        RequestStep(id="unknown", operation_id="missingOperation"),
+        SPEC,
+    )
+
+    assert report.violations == ()
+    assert [issue.code for issue in report.issues] == ["unknown_operation"]
+
+
 def test_reports_missing_required_body_and_unexpected_body() -> None:
     create_data = deepcopy(load_test_plan(PLAN_DIR / "all-methods.yaml").model_dump(mode="json"))
     create_request = _first_step(create_data)["request"]
@@ -260,6 +351,27 @@ def test_reports_missing_required_body_and_unexpected_body() -> None:
 
     assert "request_schema_violation" in {issue.code for issue in create_issues}
     assert "unexpected_request_body" in {issue.code for issue in read_issues}
+
+
+def test_distinguishes_missing_required_body_from_explicit_json_null() -> None:
+    missing_data = deepcopy(
+        load_test_plan(PLAN_DIR / "all-methods.yaml").model_dump(mode="json")
+    )
+    missing_request = _first_step(missing_data)["request"]
+    assert isinstance(missing_request, dict)
+    del missing_request["body"]
+
+    null_data = deepcopy(load_test_plan(PLAN_DIR / "all-methods.yaml").model_dump(mode="json"))
+    null_request = _first_step(null_data)["request"]
+    assert isinstance(null_request, dict)
+    null_request["body"] = None
+
+    missing_issues = validate_plan_semantics(PlanModel.model_validate(missing_data), SPEC)
+    null_issues = validate_plan_semantics(PlanModel.model_validate(null_data), SPEC)
+
+    assert any("required request body is missing" in issue.message for issue in missing_issues)
+    assert not any("required request body is missing" in issue.message for issue in null_issues)
+    assert "request_schema_violation" in {issue.code for issue in null_issues}
 
 
 def test_query_order_relation_rejects_different_parameter_values() -> None:

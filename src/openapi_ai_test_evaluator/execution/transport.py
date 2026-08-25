@@ -8,7 +8,10 @@ from time import perf_counter_ns
 import httpx
 
 from openapi_ai_test_evaluator.domain.execution import ErrorCategory
-from openapi_ai_test_evaluator.execution.request_builder import PreparedRequest
+from openapi_ai_test_evaluator.execution.request_builder import (
+    PreparedRequest,
+    encode_json_body,
+)
 
 DEFAULT_MAX_RESPONSE_BYTES = 1_048_576
 
@@ -68,14 +71,20 @@ class HttpTransport:
         started_at = perf_counter_ns()
         request_path = request.path.lstrip("/")
         timeout_seconds = request.timeout_ms / 1000
+        request_body = encode_json_body(request)
+        headers = dict(request.headers)
+        if request.has_json_body and not any(
+            name.casefold() == "content-type" for name in headers
+        ):
+            headers["Content-Type"] = "application/json"
 
         try:
-            if request.json_body is None:
+            if request_body is None:
                 response_context = self._client.stream(
                     request.method,
                     request_path,
                     params=request.query,
-                    headers=request.headers,
+                    headers=headers,
                     timeout=timeout_seconds,
                 )
             else:
@@ -83,8 +92,8 @@ class HttpTransport:
                     request.method,
                     request_path,
                     params=request.query,
-                    headers=request.headers,
-                    json=request.json_body,
+                    headers=headers,
+                    content=request_body,
                     timeout=timeout_seconds,
                 )
 

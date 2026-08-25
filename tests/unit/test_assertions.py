@@ -60,6 +60,22 @@ def test_executes_status_and_json_equality_with_generated_ids() -> None:
     ]
 
 
+def test_executes_status_membership() -> None:
+    plan_assertion = assertion(operator="status_in", expected=[400, 422])
+
+    passed = execute_assertions(
+        [plan_assertion], processed_response({}, status_code=422), {}
+    )[0]
+    failed = execute_assertions(
+        [plan_assertion], processed_response({}, status_code=200), {}
+    )[0]
+
+    assert passed.outcome is ExecutionOutcome.PASSED
+    assert passed.actual == 422
+    assert passed.expected == [400, 422]
+    assert failed.outcome is ExecutionOutcome.FAILED
+
+
 def test_distinguishes_existing_json_null_from_missing_pointer() -> None:
     assertions = [
         assertion(

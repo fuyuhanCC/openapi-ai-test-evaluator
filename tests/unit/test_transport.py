@@ -19,6 +19,7 @@ def prepared_request(**changes: object) -> PreparedRequest:
         "path_parameters": (),
         "query": (("tag", "first"), ("tag", "second")),
         "headers": {"X-Test": "transport"},
+        "has_json_body": True,
         "json_body": {"name": "Created Item"},
         "timeout_ms": 5000,
     }
@@ -65,11 +66,32 @@ def test_does_not_send_json_null_for_absent_body() -> None:
         transport=httpx.MockTransport(handler),
     ) as transport:
         response = transport.send(
-            prepared_request(method="GET", path="/items/1", query=(), json_body=None)
+            prepared_request(
+                method="GET",
+                path="/items/1",
+                query=(),
+                has_json_body=False,
+                json_body=None,
+            )
         )
 
     assert response.status_code == 204
     assert response.body == b""
+
+
+def test_sends_explicit_json_null() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.content == b"null"
+        assert request.headers["content-type"] == "application/json"
+        return httpx.Response(400)
+
+    with HttpTransport(
+        "https://example.test",
+        transport=httpx.MockTransport(handler),
+    ) as transport:
+        response = transport.send(prepared_request(json_body=None))
+
+    assert response.status_code == 400
 
 
 def test_does_not_follow_redirects() -> None:

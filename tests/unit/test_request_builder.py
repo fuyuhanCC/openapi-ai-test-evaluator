@@ -33,12 +33,39 @@ def test_builds_request_from_operation_and_plan_values() -> None:
     assert request.path == "/items"
     assert request.path_parameters == ()
     assert request.query == ()
+    assert request.has_json_body is True
     assert request.json_body == {
         "name": "Test Item",
         "price": 10.0,
         "status": "active",
     }
     assert request.timeout_ms == 5000
+
+
+def test_distinguishes_absent_body_from_explicit_json_null() -> None:
+    absent = build_request(
+        RequestStep(id="list", operation_id="listItems"),
+        SPEC,
+        variables={},
+        defaults=ALL_METHODS_PLAN.defaults,
+    )
+    explicit_null = build_request(
+        RequestStep.model_validate(
+            {
+                "id": "create",
+                "operation_id": "createItem",
+                "request": {"body": None},
+            }
+        ),
+        SPEC,
+        variables={},
+        defaults=ALL_METHODS_PLAN.defaults,
+    )
+
+    assert absent.has_json_body is False
+    assert absent.json_body is None
+    assert explicit_null.has_json_body is True
+    assert explicit_null.json_body is None
 
 
 def test_resolves_and_url_encodes_path_variable() -> None:

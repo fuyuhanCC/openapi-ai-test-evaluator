@@ -23,6 +23,7 @@ def prepared_request(**changes: object) -> PreparedRequest:
         "path_parameters": (("itemId", "folder/item 1"),),
         "query": (("tag", "first"), ("tag", "second")),
         "headers": {"X-Test": "adapter"},
+        "has_json_body": False,
         "json_body": None,
         "timeout_ms": 5000,
     }
@@ -36,6 +37,7 @@ def test_adapts_prepared_request_to_openapi_core_protocol() -> None:
             operation_id="updateItem",
             method="PATCH",
             headers={"X-Test": "adapter"},
+            has_json_body=True,
             json_body={"name": "café"},
         ),
         SPEC.operations["updateItem"],
@@ -65,6 +67,25 @@ def test_preserves_explicit_request_content_type() -> None:
 
     assert adapter.content_type == "application/json; charset=utf-8"
     assert adapter.body is None
+
+
+def test_adapts_explicit_json_null() -> None:
+    adapter = adapt_openapi_request(
+        prepared_request(
+            operation_id="createItem",
+            method="POST",
+            path="/items",
+            path_parameters=(),
+            query=(),
+            has_json_body=True,
+            json_body=None,
+        ),
+        SPEC.operations["createItem"],
+        "https://example.test",
+    )
+
+    assert adapter.content_type == "application/json"
+    assert adapter.body == b"null"
 
 
 def test_rejects_mismatched_operation() -> None:

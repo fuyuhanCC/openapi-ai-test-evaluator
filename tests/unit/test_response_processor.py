@@ -26,6 +26,7 @@ def prepared_request() -> PreparedRequest:
         path_parameters=(("itemId", "1"),),
         query=(),
         headers={},
+        has_json_body=False,
         json_body=None,
         timeout_ms=5000,
     )

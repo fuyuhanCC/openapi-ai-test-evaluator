@@ -51,6 +51,7 @@
     "AssertionOperator": {
       "enum": [
         "status_is",
+        "status_in",
         "schema_matches",
         "equals",
         "not_equals",
@@ -514,6 +515,7 @@
     },
     "Scenario": {
       "additionalProperties": false,
+      "description": "Legacy name for a TestCase nested inside TestPlan.",
       "properties": {
         "id": {
           "pattern": "^[a-z][a-z0-9-]*$",

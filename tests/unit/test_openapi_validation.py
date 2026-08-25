@@ -22,6 +22,7 @@ def prepared_request(**changes: object) -> PreparedRequest:
         "path_parameters": (("itemId", "1"),),
         "query": (),
         "headers": {},
+        "has_json_body": False,
         "json_body": None,
         "timeout_ms": 5000,
     }
@@ -64,6 +65,25 @@ def test_reports_invalid_request_parameter() -> None:
     assert "itemId" in issues[0].message
     assert issues[0].details is not None
     assert issues[0].details["cause_type"] == "CastError"
+
+
+def test_validates_explicit_json_null_as_a_present_request_body() -> None:
+    spec = load_openapi(ROOT / "examples" / "demo-items" / "openapi.yaml")
+    validator = OpenAPIContractValidator(spec, "http://127.0.0.1:8000")
+    request = prepared_request(
+        operation_id="createItem",
+        method="POST",
+        path="/items",
+        path_parameters=(),
+        has_json_body=True,
+        json_body=None,
+    )
+
+    issues = validator.validate_request(request)
+
+    assert len(issues) == 1
+    assert issues[0].subject is OpenAPIValidationSubject.REQUEST
+    assert issues[0].error_type == "InvalidRequestBody"
 
 
 @pytest.mark.parametrize("spec_name", ["openapi.yaml", "openapi-3.1.yaml"])

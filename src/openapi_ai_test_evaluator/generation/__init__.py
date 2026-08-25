@@ -25,10 +25,24 @@ from openapi_ai_test_evaluator.generation.provider import (
     ProviderRequest,
     ProviderResponse,
 )
+from openapi_ai_test_evaluator.generation.schemathesis_adapter import (
+    AdaptationRejection,
+    AdaptationRejectionCode,
+    CapturedGenerationMode,
+    CapturedPhase,
+    CapturedSchemathesisCase,
+    SchemathesisCaseAdaptation,
+    adapt_schemathesis_case,
+)
 
 __all__ = [
     "DEFAULT_DEEPSEEK_BASE_URL",
     "DEEPSEEK_API_KEY_ENV",
+    "AdaptationRejection",
+    "AdaptationRejectionCode",
+    "CapturedGenerationMode",
+    "CapturedPhase",
+    "CapturedSchemathesisCase",
     "DeepSeekProvider",
     "DeepSeekProviderConfigError",
     "FakeProvider",
@@ -39,7 +53,9 @@ __all__ = [
     "ProviderResponse",
     "PROMPT_VERSION",
     "SUPPORTED_PROMPT_VERSIONS",
+    "SchemathesisCaseAdaptation",
     "PromptBuildError",
+    "adapt_schemathesis_case",
     "build_openapi_context",
     "build_provider_request",
     "generate_cases_from_openapi",

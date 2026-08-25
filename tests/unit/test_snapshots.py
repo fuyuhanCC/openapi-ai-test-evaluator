@@ -22,6 +22,7 @@ def test_builds_and_sanitizes_request_snapshot() -> None:
         path_parameters=(),
         query=(("access_token", "unsafe-query-token"), ("tag", "visible")),
         headers={"Authorization": "Bearer unsafe", "X-Trace": "visible"},
+        has_json_body=True,
         json_body=body,
         timeout_ms=5000,
     )
@@ -58,6 +59,7 @@ def test_request_snapshot_does_not_mutate_original_body() -> None:
         path_parameters=(),
         query=(),
         headers={},
+        has_json_body=True,
         json_body=body,
         timeout_ms=5000,
     )
@@ -75,6 +77,7 @@ def test_builds_empty_request_body_snapshot() -> None:
         path_parameters=(("itemId", "1"),),
         query=(),
         headers={},
+        has_json_body=False,
         json_body=None,
         timeout_ms=5000,
     )
@@ -85,6 +88,27 @@ def test_builds_empty_request_body_snapshot() -> None:
     assert snapshot.body.value is None
     assert snapshot.body.size_bytes == 0
     assert "content-type" not in snapshot.headers
+
+
+def test_builds_explicit_json_null_request_snapshot() -> None:
+    request = PreparedRequest(
+        operation_id="createItem",
+        method="POST",
+        path="/items",
+        path_parameters=(),
+        query=(),
+        headers={},
+        has_json_body=True,
+        json_body=None,
+        timeout_ms=5000,
+    )
+
+    snapshot = build_request_snapshot(request)
+
+    assert snapshot.body.media_type == "application/json"
+    assert snapshot.body.value is None
+    assert snapshot.body.size_bytes == 4
+    assert snapshot.headers["content-type"] == "application/json"
 
 
 def test_parses_and_sanitizes_json_response_snapshot() -> None:

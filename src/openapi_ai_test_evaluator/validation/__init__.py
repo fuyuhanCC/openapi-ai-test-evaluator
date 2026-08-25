@@ -8,7 +8,9 @@ from openapi_ai_test_evaluator.validation.case_batch_loader import (
 )
 from openapi_ai_test_evaluator.validation.plan_loader import PlanLoadError, load_test_plan
 from openapi_ai_test_evaluator.validation.semantic_validator import (
+    RequestViolationReport,
     SemanticIssue,
+    detect_request_violations,
     validate_plan_semantics,
     validate_test_case_batch_semantics,
 )
@@ -16,8 +18,10 @@ from openapi_ai_test_evaluator.validation.semantic_validator import (
 __all__ = [
     "BatchDocumentFormat",
     "PlanLoadError",
+    "RequestViolationReport",
     "SemanticIssue",
     "TestCaseBatchLoadError",
+    "detect_request_violations",
     "load_test_case_batch",
     "load_test_plan",
     "parse_test_case_batch",

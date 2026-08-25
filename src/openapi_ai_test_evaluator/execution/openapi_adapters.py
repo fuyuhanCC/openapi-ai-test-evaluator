@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from urllib.parse import urlsplit, urlunsplit
 
@@ -10,7 +9,10 @@ from openapi_core.datatypes import RequestParameters
 from werkzeug.datastructures import Headers, ImmutableMultiDict
 
 from openapi_ai_test_evaluator.domain.openapi import OperationModel
-from openapi_ai_test_evaluator.execution.request_builder import PreparedRequest
+from openapi_ai_test_evaluator.execution.request_builder import (
+    PreparedRequest,
+    encode_json_body,
+)
 from openapi_ai_test_evaluator.execution.transport import TransportResponse
 
 
@@ -48,7 +50,7 @@ def adapt_openapi_request(
 
     host_url, path, path_pattern = _target_paths(base_url, request.path, operation.path)
     headers = Headers(request.headers.items())
-    if request.json_body is not None and "Content-Type" not in headers:
+    if request.has_json_body and "Content-Type" not in headers:
         headers["Content-Type"] = "application/json"
 
     return OpenAPIRequestAdapter(
@@ -63,7 +65,7 @@ def adapt_openapi_request(
             path=dict(request.path_parameters),
         ),
         content_type=(headers.get("Content-Type") or "").casefold(),
-        body=_encode_json_body(request),
+        body=encode_json_body(request),
     )
 
 
@@ -96,14 +98,3 @@ def _target_paths(base_url: str, path: str, path_pattern: str) -> tuple[str, str
 
 def _join_url_path(base_path: str, path: str) -> str:
     return f"{base_path}/{path.lstrip('/')}" or "/"
-
-
-def _encode_json_body(request: PreparedRequest) -> bytes | None:
-    if request.json_body is None:
-        return None
-    return json.dumps(
-        request.json_body,
-        ensure_ascii=False,
-        allow_nan=False,
-        separators=(",", ":"),
-    ).encode("utf-8")

@@ -17,6 +17,7 @@ from openapi_ai_test_evaluator.domain.openapi import (
 from openapi_ai_test_evaluator.domain.test_case import (
     AssertionOperator,
     ExecutionConfig,
+    ExpectedViolation,
     RelationType,
     RequestMode,
     RequestStep,
@@ -38,6 +39,14 @@ class SemanticIssue(ContractModel):
     code: str
     path: str
     message: str
+
+
+@dataclass(frozen=True, slots=True)
+class RequestViolationReport:
+    """Detected OpenAPI violations plus blockers that prevent safe inference."""
+
+    violations: tuple[ExpectedViolation, ...]
+    issues: tuple[SemanticIssue, ...]
 
 
 @dataclass(frozen=True)
@@ -181,10 +190,11 @@ def _validate_request_body(
     issues: list[SemanticIssue] = []
     detected: list[_DetectedViolation] = []
     body = step.request.body
+    body_present = step.request.body_present
     request_body = operation.request_body
 
     if request_body is None:
-        if body is not None:
+        if body_present:
             issues.append(
                 _issue(
                     "unexpected_request_body",
@@ -194,7 +204,7 @@ def _validate_request_body(
             )
         return issues, detected
 
-    if body is None:
+    if not body_present:
         if request_body.required:
             detected.append(
                 _DetectedViolation(
@@ -230,6 +240,77 @@ def _validate_request_body(
             )
         )
     return issues, detected
+
+
+def _analyze_request_contract(
+    step: RequestStep,
+    operation: OperationModel,
+    spec: OpenAPISpec,
+    path: str,
+    default_headers: dict[str, str],
+    variables: dict[str, Any],
+) -> tuple[list[SemanticIssue], list[_DetectedViolation]]:
+    parameter_issues, parameter_violations = _validate_parameter_collection(
+        step,
+        operation,
+        spec,
+        path,
+        default_headers,
+        variables,
+    )
+    body_issues, body_violations = _validate_request_body(step, operation, spec, path)
+    return [*parameter_issues, *body_issues], [*parameter_violations, *body_violations]
+
+
+def detect_request_violations(
+    step: RequestStep,
+    spec: OpenAPISpec,
+    *,
+    config: ExecutionConfig | None = None,
+) -> RequestViolationReport:
+    """Infer declarations for one concrete negative request without trusting its mode."""
+    operation = spec.operations.get(step.operation_id)
+    if operation is None:
+        return RequestViolationReport(
+            violations=(),
+            issues=(
+                _issue(
+                    "unknown_operation",
+                    "step.operation_id",
+                    f"operationId {step.operation_id!r} does not exist in {spec.spec_id}",
+                ),
+            ),
+        )
+
+    issues = [
+        _issue(
+            "unsupported_operation",
+            "step",
+            f"{operation.operation_id}: {reason}",
+        )
+        for reason in operation.unsupported_reasons
+    ]
+    actual_config = config or ExecutionConfig()
+    request_issues, detected = _analyze_request_contract(
+        step,
+        operation,
+        spec,
+        "step",
+        actual_config.headers,
+        actual_config.initial_variables,
+    )
+    issues.extend(request_issues)
+
+    unique_violations = {violation.key: violation for violation in detected}
+    violations = tuple(
+        ExpectedViolation(
+            code=violation.code,
+            location=violation.location,
+            field=violation.field,
+        )
+        for violation in sorted(unique_violations.values(), key=lambda item: item.key)
+    )
+    return RequestViolationReport(violations=violations, issues=tuple(issues))
 
 
 def _compare_declared_violations(
@@ -284,13 +365,23 @@ def _response_for_status(operation: OperationModel, status: int) -> Any:
 
 
 def _expected_statuses(step: RequestStep) -> list[int]:
-    return [
-        assertion.expected
-        for assertion in step.assertions
-        if assertion.operator is AssertionOperator.STATUS_IS
-        and isinstance(assertion.expected, int)
-        and not isinstance(assertion.expected, bool)
-    ]
+    statuses: list[int] = []
+    for assertion in step.assertions:
+        if (
+            assertion.operator is AssertionOperator.STATUS_IS
+            and isinstance(assertion.expected, int)
+            and not isinstance(assertion.expected, bool)
+        ):
+            statuses.append(assertion.expected)
+        elif assertion.operator is AssertionOperator.STATUS_IN and isinstance(
+            assertion.expected, list
+        ):
+            statuses.extend(
+                status
+                for status in assertion.expected
+                if isinstance(status, int) and not isinstance(status, bool)
+            )
+    return list(dict.fromkeys(statuses))
 
 
 def _candidate_response_schemas(
@@ -405,7 +496,7 @@ def _validate_step(
     for reason in operation.unsupported_reasons:
         issues.append(_issue("unsupported_operation", path, f"{operation.operation_id}: {reason}"))
 
-    parameter_issues, parameter_violations = _validate_parameter_collection(
+    request_issues, detected_violations = _analyze_request_contract(
         step,
         operation,
         spec,
@@ -413,13 +504,11 @@ def _validate_step(
         default_headers,
         plan_variables,
     )
-    body_issues, body_violations = _validate_request_body(step, operation, spec, path)
-    issues.extend(parameter_issues)
-    issues.extend(body_issues)
+    issues.extend(request_issues)
     issues.extend(
         _compare_declared_violations(
             step,
-            [*parameter_violations, *body_violations],
+            detected_violations,
             path,
         )
     )
