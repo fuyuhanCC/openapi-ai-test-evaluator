@@ -1,14 +1,32 @@
 """OATE command-line application."""
 
 import json
+import re
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, NoReturn
+from uuid import uuid4
 
 import typer
+from pydantic import ValidationError
 
-from openapi_ai_test_evaluator.domain import OpenAPISpec, TestCaseBatch, TestPlan
+from openapi_ai_test_evaluator.domain import (
+    GenerationConfig,
+    GenerationRecord,
+    OpenAPISpec,
+    TestCaseBatch,
+    TestPlan,
+)
 from openapi_ai_test_evaluator.domain.execution import ExecutionOutcome
 from openapi_ai_test_evaluator.execution import execute_test_case_batch, execute_test_plan
+from openapi_ai_test_evaluator.generation import (
+    PROMPT_VERSION,
+    DeepSeekProvider,
+    DeepSeekProviderConfigError,
+    PromptBuildError,
+    generate_cases_from_openapi,
+)
 from openapi_ai_test_evaluator.spec import SpecLoadError, load_openapi
 from openapi_ai_test_evaluator.validation import (
     PlanLoadError,
@@ -32,6 +50,245 @@ cases_app = typer.Typer(
 )
 app.add_typer(plan_app, name="plan")
 app.add_typer(cases_app, name="cases")
+
+
+class GenerationProviderChoice(StrEnum):
+    DEEPSEEK = "deepseek"
+
+
+@cases_app.command("generate")
+def generate_cases(
+    spec: Annotated[
+        Path,
+        typer.Option("--spec", exists=True, file_okay=True, dir_okay=False, readable=True),
+    ],
+    cases_output: Annotated[
+        Path,
+        typer.Option("--cases-output", file_okay=True, dir_okay=False),
+    ],
+    record_output: Annotated[
+        Path,
+        typer.Option("--record-output", file_okay=True, dir_okay=False),
+    ],
+    provider: Annotated[
+        GenerationProviderChoice,
+        typer.Option("--provider", help="Test-case generation provider."),
+    ] = GenerationProviderChoice.DEEPSEEK,
+    model: Annotated[
+        str,
+        typer.Option("--model", help="Provider model identifier."),
+    ] = "deepseek-v4-flash",
+    generation_id: Annotated[
+        str | None,
+        typer.Option("--generation-id", help="Stable identifier for this generation attempt."),
+    ] = None,
+    prompt_version: Annotated[
+        str,
+        typer.Option("--prompt-version", help="Versioned generation prompt."),
+    ] = PROMPT_VERSION,
+    max_cases: Annotated[
+        int,
+        typer.Option("--max-cases", help="Maximum generated test cases."),
+    ] = 20,
+    max_steps_per_case: Annotated[
+        int,
+        typer.Option("--max-steps-per-case", help="Maximum setup/main/cleanup steps per case."),
+    ] = 5,
+    temperature: Annotated[
+        float,
+        typer.Option("--temperature", help="Model sampling temperature."),
+    ] = 0.0,
+    max_output_tokens: Annotated[
+        int,
+        typer.Option("--max-output-tokens", help="Maximum generated tokens."),
+    ] = 4096,
+    timeout_ms: Annotated[
+        int,
+        typer.Option("--timeout-ms", help="Provider request timeout in milliseconds."),
+    ] = 60_000,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Allow replacing existing artifact files."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit a machine-readable generation summary."),
+    ] = False,
+) -> None:
+    """Generate a validated TestCaseBatch and a separate GenerationRecord."""
+    _prepare_generation_outputs(cases_output, record_output, overwrite, json_output)
+
+    actual_generation_id = generation_id or _new_generation_id()
+    if re.fullmatch(r"[a-z][a-z0-9-]*", actual_generation_id) is None:
+        _report_generation_input_error(
+            "config",
+            ValueError("generation ID must match ^[a-z][a-z0-9-]*$"),
+            json_output,
+        )
+
+    try:
+        openapi_spec = load_openapi(spec)
+    except SpecLoadError as error:
+        _report_generation_input_error("openapi", error, json_output)
+
+    try:
+        config = GenerationConfig(
+            model=model,
+            prompt_version=prompt_version,
+            max_cases=max_cases,
+            max_steps_per_case=max_steps_per_case,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+            timeout_ms=timeout_ms,
+        )
+    except ValidationError as error:
+        _report_generation_input_error("config", error, json_output)
+
+    if provider is not GenerationProviderChoice.DEEPSEEK:
+        _report_generation_input_error(
+            "provider-config",
+            ValueError(f"unsupported generation provider: {provider.value}"),
+            json_output,
+        )
+
+    try:
+        deepseek_provider = _deepseek_provider_from_env()
+        with deepseek_provider:
+            attempt = generate_cases_from_openapi(
+                deepseek_provider,
+                openapi_spec,
+                config,
+                generation_id=actual_generation_id,
+            )
+    except (DeepSeekProviderConfigError, PromptBuildError) as error:
+        stage = "provider-config" if isinstance(error, DeepSeekProviderConfigError) else "prompt"
+        _report_generation_input_error(stage, error, json_output)
+
+    _write_generation_artifact(record_output, attempt.record.model_dump_json(indent=2), json_output)
+
+    if attempt.batch is None:
+        summary = _generation_summary(
+            attempt.record,
+            cases_output=None,
+            record_output=record_output,
+        )
+        _emit_generation_summary(summary, json_output)
+        raise typer.Exit(code=1)
+
+    _write_generation_artifact(cases_output, attempt.batch.model_dump_json(indent=2), json_output)
+    summary = _generation_summary(
+        attempt.record,
+        cases_output=cases_output,
+        record_output=record_output,
+        case_count=len(attempt.batch.cases),
+    )
+    _emit_generation_summary(summary, json_output)
+
+
+def _deepseek_provider_from_env() -> DeepSeekProvider:
+    return DeepSeekProvider.from_env()
+
+
+def _new_generation_id() -> str:
+    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+    return f"generation-{timestamp}-{uuid4().hex[:8]}"
+
+
+def _prepare_generation_outputs(
+    cases_output: Path,
+    record_output: Path,
+    overwrite: bool,
+    json_output: bool,
+) -> None:
+    if cases_output.resolve() == record_output.resolve():
+        _report_generation_input_error(
+            "artifacts",
+            ValueError("cases-output and record-output must be different files"),
+            json_output,
+        )
+    existing = [path for path in (cases_output, record_output) if path.exists()]
+    if existing and not overwrite:
+        paths = ", ".join(str(path) for path in existing)
+        _report_generation_input_error(
+            "artifacts",
+            ValueError(f"refusing to overwrite existing artifacts: {paths}"),
+            json_output,
+        )
+    try:
+        cases_output.parent.mkdir(parents=True, exist_ok=True)
+        record_output.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        _report_generation_input_error("artifacts", error, json_output)
+
+
+def _write_generation_artifact(path: Path, serialized: str, json_output: bool) -> None:
+    try:
+        path.write_text(f"{serialized}\n", encoding="utf-8")
+    except OSError as error:
+        _report_generation_input_error("artifacts", error, json_output)
+
+
+def _generation_summary(
+    record: GenerationRecord,
+    *,
+    cases_output: Path | None,
+    record_output: Path,
+    case_count: int | None = None,
+) -> dict[str, object]:
+    summary: dict[str, object] = {
+        "generation_id": record.generation_id,
+        "status": record.status.value,
+        "provider": record.provider,
+        "model": record.model,
+        "record_output": str(record_output),
+    }
+    if cases_output is not None:
+        summary["cases_output"] = str(cases_output)
+    if case_count is not None:
+        summary["cases"] = case_count
+    if record.error is not None:
+        summary["error"] = record.error.model_dump()
+    return summary
+
+
+def _emit_generation_summary(summary: dict[str, object], json_output: bool) -> None:
+    if json_output:
+        typer.echo(json.dumps(summary))
+        return
+    status = summary["status"]
+    if status == "succeeded":
+        typer.echo(
+            f"Generation {summary['generation_id']}: succeeded "
+            f"({_count_label(summary['cases'], 'case')}); "
+            f"wrote {summary['cases_output']} and {summary['record_output']}"
+        )
+    else:
+        error = summary.get("error")
+        typer.echo(
+            f"Generation {summary['generation_id']}: {status}; "
+            f"wrote {summary['record_output']}; error={error}",
+            err=True,
+        )
+
+
+def _report_generation_input_error(
+    stage: str,
+    error: Exception,
+    json_output: bool,
+) -> NoReturn:
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "status": "not_started",
+                    "stage": stage,
+                    "error": str(error),
+                }
+            )
+        )
+    else:
+        typer.echo(f"Cannot generate TestCaseBatch ({stage}): {error}", err=True)
+    raise typer.Exit(code=1)
 
 
 @cases_app.command("validate")

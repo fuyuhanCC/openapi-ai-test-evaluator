@@ -4,16 +4,14 @@ An experimental framework for generating declarative API tests from OpenAPI
 documents and evaluating their fault-detection capability with deterministic
 oracles.
 
-> **Current status:** the V1 contracts, OpenAPI 3.0/3.1 common-subset loader,
-> plan-to-spec semantic validation, and core HTTP execution pipeline are
-> implemented. Deterministic declarative assertions and response extraction are
-> also implemented and coordinated into single-step execution. Scenario-local
-> setup/main sequencing, variable propagation, and conditional cleanup are
-> implemented. All three V1 metamorphic relations and all three lifecycle
-> consistency checks are evaluated over real step executions. Scenario outcomes
-> are aggregated into a complete RunResult and exposed through `oate run`;
-> generators, DeepSeek integration, PetClinic, and fault injection are planned
-> next.
+> **Current status:** provider-independent TestCaseBatch generation and execution
+> are implemented for the supported OpenAPI 3.0/3.1 scope. The generation path
+> includes normalized OpenAPI context, a versioned prompt, a DeepSeek HTTP
+> adapter, structural and semantic output validation, and separate case and
+> generation artifacts. The deterministic HTTP runner supports assertions,
+> extraction, setup/main/cleanup sequencing, and metamorphic/lifecycle
+> relations. Schemathesis integration, benchmark services, fault injection, and
+> aggregate experiment reports remain to be implemented.
 
 ## What works today
 
@@ -69,6 +67,46 @@ oracles.
 
 ```bash
 uv sync
+```
+
+## Generate Test Cases with DeepSeek
+
+Set the API key in the process environment. It is never included in a
+ProviderRequest or generation artifact:
+
+```bash
+export DEEPSEEK_API_KEY="your-key"
+```
+
+Generate a validated TestCaseBatch and a separate GenerationRecord:
+
+```bash
+uv run oate cases generate \
+  --spec examples/demo-items/openapi.yaml \
+  --provider deepseek \
+  --model deepseek-v4-flash \
+  --generation-id deepseek-demo-001 \
+  --cases-output artifacts/cases/deepseek-demo-001.json \
+  --record-output artifacts/generations/deepseek-demo-001.json
+```
+
+The cases artifact is written only when the model output passes structural,
+generation-limit, and OpenAPI semantic validation. The GenerationRecord is
+written for both successful and failed provider attempts. Existing artifact
+files are not replaced unless `--overwrite` is explicitly provided.
+
+Validate and run a generated batch with the same runner used by every adapted
+generator:
+
+```bash
+uv run oate cases validate \
+  --spec examples/demo-items/openapi.yaml \
+  --cases artifacts/cases/deepseek-demo-001.json
+
+uv run oate cases run \
+  --spec examples/demo-items/openapi.yaml \
+  --cases artifacts/cases/deepseek-demo-001.json \
+  --base-url http://127.0.0.1:8000
 ```
 
 ## Validate a TestPlan

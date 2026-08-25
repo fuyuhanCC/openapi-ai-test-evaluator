@@ -2,6 +2,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 import pytest
 from typer.testing import CliRunner
 
@@ -15,9 +16,224 @@ from openapi_ai_test_evaluator.domain.execution import (
     StepResult,
 )
 from openapi_ai_test_evaluator.domain.execution import TestCaseResult as CaseResult
+from openapi_ai_test_evaluator.generation import DeepSeekProvider
 
 ROOT = Path(__file__).parents[2]
 runner = CliRunner()
+
+
+def deepseek_response(content: str, *, status: int = 200) -> httpx.Response:
+    return httpx.Response(
+        status,
+        json={
+            "id": "completion-cli",
+            "model": "deepseek-v4-flash",
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {"role": "assistant", "content": content},
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "total_tokens": 120,
+                "prompt_cache_hit_tokens": 0,
+            },
+        },
+    )
+
+
+def generated_list_case_batch() -> str:
+    return json.dumps(
+        {
+            "schema_version": "1.0",
+            "cases": [
+                {
+                    "id": "generated-list-items",
+                    "steps": [
+                        {
+                            "id": "list-items",
+                            "operation_id": "listItems",
+                            "assertions": [
+                                {"operator": "status_is", "expected": 200},
+                                {"operator": "schema_matches"},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+
+def test_cases_generate_writes_cases_and_generation_record_with_mock_http(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
+    cases_output = tmp_path / "cases" / "deepseek.json"
+    record_output = tmp_path / "generations" / "deepseek.json"
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["body"] = json.loads(request.content)
+        return deepseek_response(generated_list_case_batch())
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        provider = DeepSeekProvider("test-key", client=client)
+        monkeypatch.setattr(
+            "openapi_ai_test_evaluator.cli.app._deepseek_provider_from_env",
+            lambda: provider,
+        )
+        result = runner.invoke(
+            app,
+            [
+                "cases",
+                "generate",
+                "--spec",
+                str(spec_path),
+                "--provider",
+                "deepseek",
+                "--model",
+                "deepseek-v4-flash",
+                "--generation-id",
+                "generation-cli",
+                "--cases-output",
+                str(cases_output),
+                "--record-output",
+                str(record_output),
+                "--json",
+            ],
+        )
+
+    assert result.exit_code == 0
+    summary = json.loads(result.stdout)
+    assert summary["status"] == "succeeded"
+    assert summary["cases"] == 1
+    assert summary["cases_output"] == str(cases_output)
+    assert captured["url"] == "https://api.deepseek.com/chat/completions"
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert body["response_format"] == {"type": "json_object"}
+
+    saved_cases = json.loads(cases_output.read_text(encoding="utf-8"))
+    saved_record = json.loads(record_output.read_text(encoding="utf-8"))
+    assert saved_cases["cases"][0]["id"] == "generated-list-items"
+    assert saved_record["kind"] == "GenerationRecord"
+    assert saved_record["generation_id"] == "generation-cli"
+    assert saved_record["token_usage"]["total_tokens"] == 120
+
+
+def test_cases_generate_writes_failure_record_but_not_cases(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
+    cases_output = tmp_path / "cases.json"
+    record_output = tmp_path / "record.json"
+
+    with httpx.Client(
+        transport=httpx.MockTransport(lambda request: deepseek_response("{}"))
+    ) as client:
+        provider = DeepSeekProvider("test-key", client=client)
+        monkeypatch.setattr(
+            "openapi_ai_test_evaluator.cli.app._deepseek_provider_from_env",
+            lambda: provider,
+        )
+        result = runner.invoke(
+            app,
+            [
+                "cases",
+                "generate",
+                "--spec",
+                str(spec_path),
+                "--generation-id",
+                "generation-invalid",
+                "--cases-output",
+                str(cases_output),
+                "--record-output",
+                str(record_output),
+                "--json",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["status"] == "invalid_output"
+    assert not cases_output.exists()
+    saved_record = json.loads(record_output.read_text(encoding="utf-8"))
+    assert saved_record["status"] == "invalid_output"
+    assert saved_record["error"]["code"] == "invalid-test-case-batch"
+
+
+def test_cases_generate_reports_missing_api_key_without_network(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+    result = runner.invoke(
+        app,
+        [
+            "cases",
+            "generate",
+            "--spec",
+            str(spec_path),
+            "--cases-output",
+            str(tmp_path / "cases.json"),
+            "--record-output",
+            str(tmp_path / "record.json"),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    summary = json.loads(result.stdout)
+    assert summary["status"] == "not_started"
+    assert summary["stage"] == "provider-config"
+    assert "DEEPSEEK_API_KEY" in summary["error"]
+
+
+def test_cases_generate_refuses_to_overwrite_before_provider_call(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
+    cases_output = tmp_path / "cases.json"
+    record_output = tmp_path / "record.json"
+    cases_output.write_text("keep-me", encoding="utf-8")
+    provider_created = False
+
+    def provider_factory() -> DeepSeekProvider:
+        nonlocal provider_created
+        provider_created = True
+        raise AssertionError("provider must not be created")
+
+    monkeypatch.setattr(
+        "openapi_ai_test_evaluator.cli.app._deepseek_provider_from_env",
+        provider_factory,
+    )
+    result = runner.invoke(
+        app,
+        [
+            "cases",
+            "generate",
+            "--spec",
+            str(spec_path),
+            "--cases-output",
+            str(cases_output),
+            "--record-output",
+            str(record_output),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["stage"] == "artifacts"
+    assert cases_output.read_text(encoding="utf-8") == "keep-me"
+    assert provider_created is False
 
 
 def run_result(outcome: ExecutionOutcome = ExecutionOutcome.PASSED) -> RunResult:
