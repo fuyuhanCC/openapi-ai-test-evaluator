@@ -4,11 +4,12 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted for V1 implementation |
-| Version | 1.0 |
-| Last updated | 2026-08-18 |
+| Status | V1 implementation in progress |
+| Version | 1.1 |
+| Last updated | 2026-08-25 |
 | Primary benchmark | Spring PetClinic REST |
-| LLM provider | DeepSeek, behind a provider interface |
+| LLM providers | Extensible provider interface; DeepSeek implemented first |
+| Conventional baseline | Schemathesis adapter planned for V1 |
 
 ## 1. Context and Motivation
 
@@ -20,10 +21,13 @@ their output is probabilistic, may be invalid, and must not be trusted as the
 final test oracle.
 
 This project builds a reusable experimental framework that separates test
-generation from test execution and evaluation. Rule-based and LLM-based
-generators produce the same declarative `TestPlan`. A deterministic validation
-and execution pipeline then evaluates those plans against clean and
-fault-injected API instances.
+generation from test execution and evaluation. LLM providers generate a strict,
+runner-ready `TestCaseBatch`; conventional tools enter through explicit
+adapters. Adapted cases use the same deterministic validation and HTTP runner
+against clean and fault-injected API instances. Tool-native capabilities that
+cannot be represented without losing meaning are kept as secondary external
+baselines and mapped into the same evaluation metrics instead of being falsely
+presented as identical cases.
 
 The framework is not tied to PetClinic. PetClinic is the first reference system
 under test (SUT) and benchmark used to produce reproducible V1 results.
@@ -35,8 +39,8 @@ framework**, not a hosted testing platform.
 
 It is intended to answer three questions:
 
-1. Can DeepSeek generate more effective executable API tests than a
-   deterministic rule-based baseline?
+1. Can an LLM generate more effective executable API tests than a mature
+   schema-driven baseline under the same API, fault set, and execution budget?
 2. How much additional fault-detection capability comes from metamorphic test
    expansion?
 3. What are the cost, latency, validity, and stability trade-offs of the
@@ -48,12 +52,14 @@ V1 will:
 
 1. Parse a supported subset of OpenAPI 3.0.x and 3.1.x documents into a
    normalized internal model.
-2. Define a generator-independent, declarative `TestPlan` contract.
-3. Provide a deterministic rule-based generator as the baseline.
-4. Integrate DeepSeek through a replaceable provider interface.
-5. Validate generated plans structurally, semantically, and for execution
+2. Define a generator-independent, declarative `TestCaseBatch` contract.
+3. Integrate Schemathesis as the first mature schema-driven baseline through an
+   adapter rather than implementing a competing baseline from scratch.
+4. Integrate LLM vendors through a replaceable provider interface, with
+   DeepSeek as the first implementation.
+5. Validate generated case batches structurally, semantically, and for execution
    safety.
-6. Execute HTTP scenarios with deterministic assertions and error
+6. Execute HTTP test cases with deterministic assertions and error
    classification.
 7. Support three explicit metamorphic relations and three lifecycle consistency
    checks.
@@ -76,7 +82,7 @@ V1 will not provide:
 - Distributed load or performance testing.
 - A Model Context Protocol (MCP) adapter.
 - A coverage-guided tool-calling agent loop.
-- Automatic selection between multiple LLM vendors.
+- Automatic model routing or selection between LLM vendors.
 
 These items may be considered after V1 has produced a stable benchmark and
 reproducible experimental result.
@@ -130,7 +136,7 @@ covered.
 
 ### 6.1 Generation and judgment are separate
 
-DeepSeek proposes test scenarios. It never decides whether a test passed.
+Generators propose test cases. An LLM never decides whether a test passed.
 Pass/fail decisions come only from deterministic mechanisms:
 
 - HTTP status expectations.
@@ -142,15 +148,18 @@ Pass/fail decisions come only from deterministic mechanisms:
 
 ### 6.2 Generated output is data, not code
 
-Every generator returns the same schema-constrained `TestPlan`. The runner only
-interprets an allowlisted set of request, extraction, and assertion operations.
+LLM providers and compatible conventional-tool adapters return the same
+schema-constrained `TestCaseBatch`. The runner only interprets an allowlisted
+set of request, extraction, assertion, and relation operations. Generated
+Python, JavaScript, shell commands, and templates are never executed.
 
 ### 6.3 Reproducibility is a feature
 
 Every benchmark run records enough information to explain and reproduce the
-result, including the specification hash, plan hash, prompt version, provider
-configuration, Docker image information, Git revision, timings, and raw
-redacted model output.
+result, including the specification hash, case-batch hash, prompt version,
+provider or tool configuration, Docker image information, Git revision,
+timings, and preserved raw provider output. Provider credentials are never
+supplied to generator content and therefore never belong in that artifact.
 
 ### 6.4 Portability is bounded and explicit
 
@@ -164,11 +173,12 @@ directory and do not leak into the framework core.
 flowchart TD
     spec["OpenAPI document"] --> loader["Spec loader and normalizer"]
     loader --> model["Normalized operation model"]
-    model --> rules["Rule-based generator"]
-    model --> llm["DeepSeek generator"]
-    rules --> plan["Declarative TestPlan"]
-    llm --> plan
-    plan --> validation["Structural, semantic, and safety validation"]
+    spec --> conventional["Schemathesis"]
+    model --> llm["LLM provider"]
+    conventional --> adapter["Conventional-tool adapter"]
+    adapter --> cases["Declarative TestCaseBatch"]
+    llm --> cases
+    cases --> validation["Structural, semantic, and safety validation"]
     validation --> runner["Deterministic HTTP runner"]
     runner --> oracles["Protocol, schema, and field oracles"]
     runner --> metamorphic["Metamorphic relation engine"]
@@ -190,6 +200,29 @@ flowchart LR
 
 With no fault enabled, the proxy operates in transparent pass-through mode.
 
+### 7.1 Current implementation checkpoint
+
+Implemented as of 2026-08-25:
+
+- OpenAPI 3.0/3.1 common-scope loading, normalization, and static validation.
+- Strict `TestCaseBatch`, `GenerationConfig`, `GenerationRecord`, and
+  `RunResult` contracts.
+- Versioned LLM prompts, the DeepSeek HTTP adapter, raw-output preservation, and
+  the `oate cases generate` command.
+- Structural and OpenAPI semantic validation for generated cases.
+- Deterministic HTTP execution with variables, assertions, extractions,
+  setup/main/cleanup, and all six declared relation types.
+- A deterministic FastAPI fixture with real local-HTTP integration coverage.
+- Legacy hand-authored `TestPlan` validation and execution compatibility.
+
+Still required for the V1 experiment:
+
+- Schemathesis adapter and budget-normalized baseline execution.
+- PetClinic benchmark packaging and deterministic reset workflow.
+- Fault proxy, fault catalog, and reference tests.
+- Experiment orchestration, aggregate evaluation, reports, Docker Compose, and
+  CI workflows.
+
 ## 8. Core Data Contracts
 
 Pydantic models are the source of truth for runtime validation. JSON Schema is
@@ -209,38 +242,42 @@ The normalized representation of one OpenAPI operation contains:
 - Tags and source location.
 - Support status and structured skip reasons.
 
-### 8.2 `TestPlan`
+### 8.2 `TestCaseBatch`
 
-`TestPlan` is the only accepted output contract for generators. It contains:
+`TestCaseBatch` is the canonical runner-ready output contract for generation
+and compatible adapters. It contains:
 
 - Schema version.
-- Generator and source metadata.
-- Target API information.
-- Runtime variable declarations.
-- Test scenarios.
+- One or more independently executable test cases.
 - Ordered request steps.
 - Response value extractions.
 - Declarative assertions.
 - Optional setup and cleanup steps.
-- Optional scenario relations, classified as metamorphic relations or lifecycle
+- Optional test-case relations, classified as metamorphic relations or lifecycle
   consistency checks.
 
-YAML is the canonical human-readable artifact format. DeepSeek is asked to
-return JSON because it is easier to validate strictly; validated JSON is then
-serialized to canonical YAML.
+JSON is the canonical generated artifact format and YAML is supported for
+human-authored fixtures. LLM providers are asked to return JSON because it is
+easier to validate strictly. Generation metadata and raw provider output are
+stored separately so an invalid model response remains inspectable without
+being confused with executable cases.
 
 Steps reference an OpenAPI `operationId` rather than duplicating the HTTP method
 and path. The validator resolves those values from the source specification.
 Query parameters are represented as an ordered list so duplicate names and
 parameter-order metamorphic tests remain expressible.
 
-Runtime values may reference plan or extracted variables with the reserved
+Runtime values may reference extracted or configured variables with the reserved
 declarative form `{"$var": "variable_name"}`. A variable reference cannot have
 sibling keys and never evaluates as an expression or template.
 
-### 8.3 `Scenario` and `Step`
+The older `TestPlan` contract remains available as a hand-authored compatibility
+entry point while existing examples and callers migrate. New generators do not
+emit `TestPlan`, and experiment artifacts use `TestCaseBatch`.
 
-A scenario may contain multiple steps so that stateful flows such as
+### 8.3 `TestCase` and `RequestStep`
+
+A test case may contain multiple steps so that stateful flows such as
 create-read-update-delete can pass values between requests. A step contains:
 
 - An existing `operationId`.
@@ -281,12 +318,30 @@ may contain the same declarative `$var` references used by requests.
 
 `contains` supports substring membership, array membership, object-key
 membership, and partial-object matching inside arrays. This lets a stateful
-scenario verify that a collection contains the resource identifier extracted
-from an earlier response without copying every returned field into the plan.
+test case verify that a collection contains the resource identifier extracted
+from an earlier response without copying every returned field into the batch.
 
-Unknown operations, extractors, or assertion operators make a plan invalid.
+Unknown operations, extractors, or assertion operators make a batch invalid.
 
-### 8.4 `RunResult`
+### 8.4 Generation and adaptation contracts
+
+`GenerationConfig` records provider-independent generation budgets and settings,
+including model, prompt version, maximum cases, maximum steps per case,
+temperature, output-token limit, and timeout.
+
+`GenerationRecord` stores one attempt's provider, model, prompt version,
+provider request identifier, timestamps, duration, status, token usage, and
+sanitized error. The validated `TestCaseBatch`, `GenerationRecord`, and raw
+provider output are separate artifacts. The raw output is preserved whenever a
+provider response is received, including responses that later fail structural,
+budget, or OpenAPI semantic validation.
+
+The Schemathesis adapter will produce an `AdaptationRecord` with the tool
+version and seed, received case count, adapted case count, rejected case count,
+and stable skip reasons. This prevents an adapter failure from being counted as
+a generator failure or silently disappearing from the denominator.
+
+### 8.5 `RunResult`
 
 `RunResult` is the complete raw execution record for one `TestCaseBatch` run
 against one target and, optionally, one configured fault. It is a single object
@@ -349,7 +404,7 @@ cases:
           body:
             media_type: application/json
             value:
-              id: item-123
+              id: 123
               name: Created Item
               price: 10.0
               status: active
@@ -362,7 +417,7 @@ cases:
             pointer: /id
             required: true
             status: extracted
-            value: item-123
+            value: 123
             redacted: false
 
         assertions:
@@ -393,7 +448,7 @@ cases:
 
         request:
           method: GET
-          path: /items/item-123
+          path: /items/123
           query: []
           headers: {}
           body:
@@ -409,7 +464,7 @@ cases:
           body:
             media_type: application/json
             value:
-              id: item-123
+              id: 123
               name: Created Item
               price: 10.0
               status: active
@@ -470,14 +525,14 @@ errors: []
 
 The result enums are deliberately finite:
 
-- Run, scenario, and step outcomes are `passed`, `failed`, `error`, or
+- Run, test-case, and step outcomes are `passed`, `failed`, `error`, or
   `skipped`.
 - Assertion outcomes are `passed`, `failed`, `error`, or `skipped`.
 - Relation outcomes additionally support `not_applicable`.
 - Extraction statuses are `extracted`, `missing`, `error`, or `skipped`.
 - Step phases are `setup`, `main`, or `cleanup`.
 - Outcome policies are `required` or `best_effort`. `best_effort` is valid only
-  for cleanup steps whose TestPlan definition sets `ignore_errors: true`.
+  for cleanup steps whose test-case definition sets `ignore_errors: true`.
 - Fault trigger statuses are `not_configured`, `triggered`, `not_triggered`, or
   `unknown`.
 - Relation comparison operators are `equals`, `set_equals`, `subset`, `prefix`,
@@ -516,75 +571,92 @@ The following invariants apply:
 - All request, response, extraction, evidence, and diagnostic values are
   sanitized before serialization.
 
-Scenario aggregation records every declared setup, main, and cleanup step. A
+Test-case aggregation records every declared setup, main, and cleanup step. A
 step not reached after an earlier required failure is materialized as
 `skipped`, so relation references and execution order remain complete in the
 artifact. Required step and relation `error` outcomes take precedence over
 `failed`, which takes precedence over `passed`. `not_applicable` relations,
 conditionally skipped cleanup, and failed `best_effort` cleanup do not fail the
 parent. Run outcome applies the same `error` then `failed` then `passed`
-precedence across scenarios.
+precedence across test cases.
 
-### 8.5 `EvaluationResult`
+### 8.6 `EvaluationResult`
 
 `EvaluationResult` contains aggregate metrics, per-fault outcomes, run metadata,
 and links to the underlying artifacts.
 
 ## 9. Generation
 
-Generators implement one logical interface:
+LLM generation implements one provider-independent logical flow:
 
 ```text
-generate(specification, generation_config) -> TestPlan
+OpenAPI -> normalized context -> ProviderRequest -> provider response
+        -> TestCaseBatch validation -> GenerationRecord + artifacts
 ```
 
-### 9.1 Rule-based baseline
+### 9.1 Conventional baseline
 
-`RuleBasedGenerator` creates deterministic cases from parameter definitions,
-required fields, examples, schemas, and common boundary values. Its initial
-strategies include:
+V1 uses Schemathesis as its first mature schema-driven baseline. The project
+does not implement a competing rule generator because a weak custom baseline
+would make the experiment measure baseline quality rather than the difference
+between conventional and LLM-based generation.
 
-- Valid example requests.
-- Missing required parameters.
-- Invalid primitive types.
-- Numeric and string boundaries.
-- Unknown resource identifiers.
-- Basic lifecycle scenarios when operation relationships can be resolved.
+The primary controlled experiment adapts eligible Schemathesis-generated
+requests into `TestCaseBatch` so they receive the same semantic checks, runner,
+deterministic oracles, request budget, fault set, and result format as LLM
+cases. Adapter limitations and dropped cases are explicit metrics, not silent
+losses.
 
-The generated plan must be stable for the same specification, configuration,
-and seed.
+Schemathesis version, mode, seed, generation limit, request limit, and wall-time
+limit are frozen in the experiment manifest. Concrete negative requests must
+declare the contract violations detected by the common semantic validator
+before they become executable `intentionally_invalid` cases.
 
-### 9.2 DeepSeek provider
+Schemathesis-native stateful or fuzzing modes that cannot yet be normalized
+without changing their semantics may be run as a labeled secondary external
+baseline. Their traffic and outcomes are mapped into the common evaluation
+schema, but they are not mixed into the primary four arms until the mapping is
+validated.
 
-`DeepSeekGenerator` uses a provider abstraction so model-specific HTTP behavior
-does not enter the domain or runner layers. It is responsible for:
+### 9.2 LLM providers
+
+Each `LLMProvider` translates the common `ProviderRequest` into one vendor call
+and returns provider-independent output text and usage metadata. DeepSeek is
+implemented first; additional providers can be added without changing the
+`TestCaseBatch`, validation, runner, or evaluation contracts.
+
+The LLM generation pipeline is responsible for:
 
 - Producing a compact normalized specification context.
-- Chunking operations when the configured context budget is exceeded.
 - Applying a versioned prompt template.
 - Requesting structured JSON output.
-- Enforcing call, token, duration, and cost budgets.
-- Handling timeouts, retryable transport errors, and rate limits.
-- Merging and deduplicating chunk results.
-- Recording token usage, latency, model identifier, and redacted raw responses.
+- Enforcing case, step, token, duration, and cost budgets.
+- Mapping timeouts, transport errors, rate limits, and invalid responses into
+  stable generation statuses.
+- Validating the returned `TestCaseBatch` structurally and against the source
+  OpenAPI document.
+- Recording token usage, latency, model identifier, validated cases, generation
+  metadata, and raw provider output as separate artifacts.
 
-The API endpoint, model identifier, and budgets are configuration values. They
-are not hardcoded into the framework.
+The API endpoint, model identifier, prompt version, and budgets are
+configuration values. Credentials are read only from environment variables and
+are never written to prompts or artifacts.
 
-If the model response cannot be parsed, V1 allows at most one repair request
-that only receives validation errors and asks for a corrected format. The model
-does not receive runtime coverage or test-execution feedback in V1.
+V1 performs one provider request per generation attempt and does not silently
+repair, retry, or rewrite invalid output. A failed attempt remains measurable
+through its `GenerationRecord` and preserved raw output. The model does not
+receive runtime coverage or test-execution feedback in V1.
 
 ## 10. Validation Pipeline
 
 OpenAPI documents are first checked by `openapi-spec-validator` and then
 normalized into the framework's operation model. Standard Schema keyword
-evaluation for concrete TestPlan values is delegated to
-`openapi-schema-validator`; the framework-owned adapter only handles TestPlan
+evaluation for concrete request values is delegated to
+`openapi-schema-validator`; the framework-owned adapter only handles runtime
 variables, stable violation codes, error locations, and the documented V1
 support boundary.
 
-Plans pass through three deterministic stages before execution:
+Case batches pass through three deterministic stages before execution:
 
 1. **Structural validation** verifies the Pydantic contract and rejects unknown
    fields or operators.
@@ -594,11 +666,12 @@ Plans pass through three deterministic stages before execution:
    limits, response-size limits, and rules for mutating operations.
 
 Each error has a stable category, location, and human-readable message. Invalid
-plans remain available as artifacts but are never executed.
+batches remain available as raw generation artifacts but are never executed as
+canonical cases.
 
 ## 11. Deterministic Runner and Oracles
 
-The runner executes scenario steps in order using HTTPX. It supports scoped
+The runner executes test-case steps in order using HTTPX. It supports scoped
 variables, response extraction, cleanup, request deadlines, and sanitized event
 logging. Runtime OpenAPI request and response validation is delegated to
 `openapi-core`; it is not reimplemented in the runner.
@@ -620,7 +693,7 @@ flowchart LR
     raw --> snapshots["Sanitized snapshots"]
 ```
 
-The request builder resolves TestPlan variables before transport. It preserves
+The request builder resolves declarative runtime variables before transport. It preserves
 query-parameter order and duplicate names, applies URI encoding to path values,
 and merges headers case-insensitively. It retains both the encoded request path
 and the unencoded path-parameter values required by runtime contract validation.
@@ -653,10 +726,10 @@ and headers remain available while body-dependent assertions and extractions
 receive a parsing issue. Assertions and OpenAPI validation always run before
 artifact snapshots are sanitized.
 
-The assertion executor interprets only the finite TestPlan operator set; it does
-not evaluate generated code or expressions. It resolves selectors against the
+The assertion executor interprets only the finite `TestCaseBatch` operator set;
+it does not evaluate generated code or expressions. It resolves selectors against the
 processed response, substitutes previously available `$var` values, and emits
-one `AssertionResult` per declaration in plan order. A successfully evaluated
+one `AssertionResult` per declaration order. A successfully evaluated
 but false predicate produces `failed`. A missing runtime variable, unavailable
 body, invalid dynamic pattern, or unsupported runtime type produces `error`
 because no deterministic verdict could be reached. Missing selected values fail
@@ -677,7 +750,7 @@ The step executor coordinates one `RequestStep` across request construction,
 runtime request validation, transport, response processing, assertions,
 extractions, and snapshot creation. It returns a stored `StepResult` together
 with the in-memory prepared request, processed response, and extracted values
-needed by later scenario execution. It does not mutate the caller's variable
+needed by later test-case execution. It does not mutate the caller's variable
 scope. Assertion failures and required missing extractions produce `failed`;
 transport, request construction, assertion evaluation, and extraction
 evaluation errors produce `error`.
@@ -687,9 +760,9 @@ runtime request-contract issue. An `intentionally_invalid` request is sent only
 when at least one runtime contract issue is observed. Exact comparison between
 declared and detected violation categories is already performed during static
 validation for statically decidable values; extending that exact comparison to
-values available only at runtime remains part of scenario-runner integration.
+values available only at runtime remains part of test-case runner integration.
 
-Scenario setup and main steps execute serially within a copy of the plan's
+Test-case setup and main steps execute serially within a copy of the configured
 initial variable scope. After each step, every successfully extracted value is
 merged before the stop decision, so a resource identifier obtained by a failed
 step remains available to later cleanup. A later successful extraction with the
@@ -701,7 +774,7 @@ and the step that caused the halt; it is not exposed as a complete
 and exchange objects are excluded from dataclass representations to reduce
 accidental disclosure through diagnostic logging.
 
-Declared scenario relations are evaluated after setup/main execution and before
+Declared test-case relations are evaluated after setup/main execution and before
 cleanup can mutate or delete the observed resources. The runtime engine
 first rechecks that the resolved requests actually satisfy the transformation
 assumed by the relation. A failed precondition is recorded as `not_applicable`;
@@ -792,7 +865,7 @@ prefix of the larger result, according to the relation's explicit `mode`.
 
 ### 12.2 Lifecycle consistency checks
 
-The following checks validate stateful API workflows. They are scenario
+The following checks validate stateful API workflows. They are test-case
 relations, but they are not classified as metamorphic testing because they do
 not derive a follow-up test through the same input-transformation principle.
 
@@ -867,26 +940,34 @@ is frozen.
 
 | Arm | Base test generation | Metamorphic expansion |
 | --- | --- | --- |
-| A | Rule-based generator | Disabled |
-| B | The exact base plan produced for A | Enabled |
-| C | DeepSeek generator | Disabled |
-| D | The exact base plan produced for C | Enabled |
+| A | Schemathesis adapter | Disabled |
+| B | The exact base batch produced for A | Enabled |
+| C | Configured LLM provider | Disabled |
+| D | The exact base batch produced for C | Enabled |
 
 A/B and C/D form paired comparisons. B and D only add deterministic
-metamorphic follow-up tests to their corresponding base plans, isolating the
+metamorphic follow-up tests to their corresponding base batches, isolating the
 value of metamorphic expansion from both generator choice and LLM sampling
-variance. Stateful lifecycle scenarios are normal base-plan capabilities and
+variance. Stateful lifecycle test cases are normal base-batch capabilities and
 may appear in every arm; they are not added only to the metamorphic arms.
+
+The primary comparison does not require Schemathesis and an LLM to generate
+identical cases—that would remove the behavior being evaluated. Fairness comes
+from using the same OpenAPI document, SUT state, request and time budgets, fault
+set, clean-baseline eligibility rule, deterministic oracles, and metric
+definitions. The exact generated base batch is frozen before its paired
+metamorphic arm is derived.
 
 ### 14.2 Protocol
 
 The benchmark uses three paired repetitions. For each repetition:
 
 1. Record the complete configuration and environment manifest.
-2. Produce the rule-based plan and one independent DeepSeek plan.
+2. Produce one adapted Schemathesis batch and one independent batch from the
+   configured LLM provider.
 3. Derive B deterministically from A and D deterministically from C.
 4. Reset PetClinic to a known state.
-5. Execute each plan through the proxy in pass-through mode.
+5. Execute each batch through the proxy in pass-through mode.
 6. Exclude or diagnose tests that fail on the clean baseline.
 7. Reset the SUT before every injected fault.
 8. Enable exactly one fault.
@@ -913,8 +994,10 @@ from being counted as successful detections.
 
 ### 15.1 Primary metrics
 
-- **Plan validity rate:** structurally and semantically valid generated test
-  cases divided by generated test cases.
+- **Generated-case validity rate:** structurally and semantically valid
+  generated test cases divided by generated test cases.
+- **Adapter conversion rate:** conventional-tool cases represented faithfully
+  as `TestCaseBatch` divided by cases received by the adapter.
 - **Executable test rate:** tests that reach a deterministic verdict divided by
   validated tests.
 - **Operation coverage:** eligible OpenAPI operations exercised by at least one
@@ -928,9 +1011,9 @@ from being counted as successful detections.
 
 - Faults detected per 100 HTTP requests.
 - Generation and execution duration.
-- DeepSeek input and output tokens.
+- LLM input, cached-input, reasoning, and output tokens when reported.
 - Estimated generation cost.
-- Number of scenarios and HTTP requests.
+- Number of test cases, steps, and HTTP requests.
 - Mean and standard deviation over repetitions.
 - Outcome agreement across repetitions.
 
@@ -949,10 +1032,11 @@ artifacts/
     ├── inputs/
     │   └── openapi.yaml
     ├── generation/
-    │   ├── raw-response.json
-    │   └── test-plan.yaml
+    │   ├── raw-output.txt
+    │   ├── generation-record.json
+    │   └── test-cases.json
     ├── execution/
-    │   └── results.jsonl
+    │   └── run-result.json
     ├── evaluation/
     │   └── summary.json
     └── reports/
@@ -965,15 +1049,18 @@ The manifest records:
 - Git revision.
 - Run seed.
 - Experiment arm and repetition.
-- OpenAPI and TestPlan hashes.
-- Prompt version and hash.
-- Provider and model identifier.
+- OpenAPI and `TestCaseBatch` hashes.
+- Prompt version and hash when an LLM is used.
+- Generator, provider, model, or external-tool identifiers.
 - Generation parameters and budgets.
 - Docker image identifiers.
 - Tool and Python versions.
 - Start and finish timestamps.
 
 Secrets and unredacted authorization values are never stored in artifacts.
+Current manual generation commands write the validated cases, generation
+record, and raw output to three caller-selected paths. The benchmark
+orchestrator will copy those immutable inputs into the run-scoped layout above.
 
 ## 17. Command-line Interface
 
@@ -981,7 +1068,11 @@ The installed CLI name is `oate`. The planned V1 surface is:
 
 ```text
 oate spec validate --spec <openapi-file>
-oate generate --spec <openapi-file> --generator rule|deepseek --out <plan>
+oate cases generate --spec <openapi-file> --provider <provider> \
+  --cases-output <cases> --record-output <record> --raw-output <raw>
+oate cases import --spec <openapi-file> --tool schemathesis --out <cases>
+oate cases validate --spec <openapi-file> --cases <cases>
+oate cases run --spec <openapi-file> --cases <cases> --base-url <url>
 oate plan validate --spec <openapi-file> --plan <plan>
 oate run --spec <openapi-file> --plan <plan> --base-url <url>
 oate benchmark --config <benchmark-config>
@@ -989,29 +1080,30 @@ oate report --run <artifact-directory>
 ```
 
 Command output is concise for humans and supports JSON mode for CI.
-`oate plan validate`, `oate plan schema`, and `oate run` are currently
-implemented. `oate run` repeats semantic validation before opening the
-transport, executes scenarios serially with isolated variable scopes, and
-returns nonzero for failed or errored runs while preserving the RunResult JSON.
-The supplied base URL is the sole target origin and redirects are disabled.
-Mutating plans require the explicit `--allow-mutations` confirmation for an
-isolated test environment.
+`oate cases generate`, `oate cases validate`, `oate cases run`, `oate plan
+validate`, `oate plan schema`, and `oate run` are currently implemented. The
+Schemathesis import, benchmark, and report commands remain planned. Run commands
+repeat semantic validation before opening the transport, execute cases
+serially with isolated variable scopes, and return nonzero for failed or
+errored runs while preserving the `RunResult` JSON. The supplied base URL is the
+sole target origin and redirects are disabled. Mutating cases require the
+explicit `--allow-mutations` confirmation for an isolated test environment.
 
-## 18. Repository Layout
+## 18. Target Repository Layout
 
 ```text
 src/openapi_ai_test_evaluator/
 ├── cli/
 ├── domain/
 ├── spec/
-├── generators/
+├── generation/
 ├── validation/
 ├── execution/
-├── metamorphic/
 ├── evaluation/
 └── reporting/
 
 services/
+├── demo_items/
 └── fault_proxy/
 
 benchmarks/
@@ -1031,7 +1123,8 @@ artifacts/
 ```
 
 Benchmark-specific code and data must depend on the framework, never the other
-way around.
+way around. `evaluation/`, `reporting/`, `fault_proxy/`, and `benchmarks/` are
+target V1 directories and are not all present at the current checkpoint.
 
 ## 19. Technology Choices
 
@@ -1041,9 +1134,9 @@ way around.
 - `openapi-schema-validator` for static Schema value validation.
 - `openapi-core` for runtime HTTP request and response validation.
 - HTTPX for HTTP execution and provider calls.
-- PyYAML for human-readable plan and configuration artifacts.
-- Typer and Rich for the CLI.
-- FastAPI for the standalone fault proxy only.
+- PyYAML for human-readable compatibility plans and configuration artifacts.
+- Typer for the CLI.
+- FastAPI for the deterministic local fixture and standalone fault proxy.
 - pytest for unit, integration, and end-to-end tests.
 - Ruff for linting and formatting.
 - Docker and Docker Compose for benchmark isolation.
@@ -1056,15 +1149,15 @@ or database.
 
 ### 20.1 Unit tests
 
-Unit tests cover data contracts, OpenAPI normalization, generation rules,
-validation, assertions, error classification, fault operators, and metamorphic
-relations without external network access.
+Unit tests cover data contracts, OpenAPI normalization, provider-independent
+generation, validation, assertions, error classification, fault operators, and
+metamorphic relations without external network access.
 
 ### 20.2 Integration tests
 
-A small local fixture API verifies the complete plan-validation and execution
-pipeline independently of PetClinic and DeepSeek. Provider behavior is tested
-with recorded or mocked responses.
+A deterministic FastAPI fixture verifies the complete case-validation and
+execution pipeline over real local HTTP independently of PetClinic and any LLM
+provider. Provider behavior is tested with recorded or mocked responses.
 
 ### 20.3 End-to-end tests
 
@@ -1073,7 +1166,7 @@ activation, reset, and report-generation tests.
 
 ### 20.4 CI policy
 
-Pull-request CI does not call the live DeepSeek API. It runs linting, unit tests,
+Pull-request CI does not call live LLM APIs. It runs linting, unit tests,
 fixture integration tests, schema checks, and Docker build checks. A real-model
 benchmark is manual and uses repository secrets; it is never required for an
 untrusted pull request.
@@ -1086,7 +1179,7 @@ untrusted pull request.
 - The runner enforces an explicit target-host allowlist.
 - Requests have global and per-request deadlines.
 - Response bodies have configurable size limits.
-- Every run has maximum scenario and request counts.
+- Every run has maximum test-case and request counts.
 - Mutating operations require an explicit isolated-test-environment setting.
 - Generated content is never evaluated or imported as executable code.
 - PetClinic state is recreated between fault scenarios.
@@ -1096,13 +1189,14 @@ untrusted pull request.
 | Risk | Mitigation |
 | --- | --- |
 | Incomplete or ambiguous OpenAPI documents | Report structured unsupported and unresolved-operation reasons. |
-| Invalid LLM output | Strict schema validation and at most one format-only repair request. |
+| Invalid LLM output | Strict schema and OpenAPI semantic validation, preserved raw output, and no execution of rejected batches. |
 | LLM nondeterminism | Paired C/D design, three repetitions, and complete raw artifacts. |
+| Conventional baseline loses tool-native semantics during adaptation | Report adapter limitations and keep non-equivalent native modes as labeled secondary baselines. |
 | False positives from volatile response fields | Explicit comparison projections and clean-baseline eligibility. |
 | State contamination between faults | Recreate or reset the SUT before each fault. |
 | Equivalent or unreachable faults | Require reference tests before freezing the benchmark. |
 | Larger suites receiving an unfair advantage | Report detections per 100 requests alongside raw detection rate. |
-| Excess DeepSeek cost | Enforce call, token, time, and cost budgets; support recorded responses during development. |
+| Excess LLM cost | Enforce call, token, time, and cost budgets; support recorded responses during development. |
 | Framework becoming PetClinic-specific | Keep all operation mappings and fault instances in the benchmark package. |
 
 ## 23. V1 Acceptance Criteria
@@ -1111,8 +1205,10 @@ V1 is complete when:
 
 1. At least two different OpenAPI fixture applications run through the core
    pipeline, demonstrating that the framework is not PetClinic-specific.
-2. Rule-based and DeepSeek generators produce the same `TestPlan` contract.
-3. Invalid or unsafe plans are deterministically rejected before execution.
+2. DeepSeek produces `TestCaseBatch`, and eligible Schemathesis cases are
+   adapted to the same runner-ready contract with explicit adapter metrics.
+3. Invalid or unsafe case batches are deterministically rejected before
+   execution.
 4. The runner never executes generated code.
 5. All three metamorphic relations and all three lifecycle consistency checks
    have unit tests and executable examples.
@@ -1122,8 +1218,8 @@ V1 is complete when:
 8. JSON, JUnit XML, and HTML reports are generated from the same raw results.
 9. `uv run pytest` passes in a clean checkout.
 10. Docker Compose reproduces the PetClinic benchmark environment.
-11. CI succeeds without a DeepSeek API key.
-12. A new user can reproduce the rule-based baseline from the README in ten
+11. CI succeeds without any LLM API key.
+12. A new user can reproduce the Schemathesis baseline from the README in ten
     minutes or less.
 
 ## 24. Future Work
@@ -1133,7 +1229,7 @@ Candidate V1.1 capabilities include:
 - Broader OpenAPI 3.1 and JSON Schema 2020-12 keyword coverage.
 - MCP adapter and evaluation skill.
 - A coverage-guided bounded tool-calling agent.
-- Multiple LLM providers and model regression comparisons.
+- Additional LLM providers and cross-model regression comparisons.
 - Prompt regression testing.
 - Additional fault operators and benchmark applications.
 - OAuth and multipart support.
