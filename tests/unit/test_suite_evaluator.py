@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -33,10 +34,13 @@ from openapi_ai_test_evaluator.domain.generation import (
     GenerationTokenUsage,
 )
 from openapi_ai_test_evaluator.evaluation import (
+    EvaluatedSuite,
     EvaluationInputError,
     FaultRun,
+    SuiteArtifactError,
     SuiteExecution,
     evaluate_suite_execution,
+    write_evaluated_suite_artifacts,
 )
 from openapi_ai_test_evaluator.spec import load_openapi
 
@@ -404,3 +408,57 @@ def test_rejects_admitted_count_that_differs_from_clean_run() -> None:
             record,
             evaluation_id="evaluation-invalid-count-r1",
         )
+
+
+def test_writes_raw_runs_and_evaluation_as_separate_artifacts(tmp_path: Path) -> None:
+    execution = suite_execution()
+    evaluation = evaluate_suite_execution(
+        execution,
+        SPEC,
+        generation_record(),
+        evaluation_id="evaluation-deepseek-r1",
+    )
+
+    paths = write_evaluated_suite_artifacts(
+        EvaluatedSuite(execution=execution, evaluation=evaluation),
+        tmp_path / "deepseek-r1",
+    )
+
+    assert json.loads(paths.clean_run.read_text(encoding="utf-8"))["kind"] == "RunResult"
+    assert len(paths.fault_runs) == 5
+    assert all(path.exists() for path in paths.fault_runs)
+    saved_evaluation = json.loads(paths.evaluation.read_text(encoding="utf-8"))
+    assert saved_evaluation["kind"] == "EvaluationResult"
+    assert saved_evaluation["clean_run_id"] == "run-clean"
+
+
+def test_refuses_to_overwrite_an_evaluated_suite_artifact_set(tmp_path: Path) -> None:
+    execution = suite_execution()
+    evaluation = evaluate_suite_execution(
+        execution,
+        SPEC,
+        generation_record(),
+        evaluation_id="evaluation-deepseek-r1",
+    )
+    suite = EvaluatedSuite(execution=execution, evaluation=evaluation)
+    output_directory = tmp_path / "deepseek-r1"
+    paths = write_evaluated_suite_artifacts(suite, output_directory)
+    original = paths.clean_run.read_text(encoding="utf-8")
+
+    with pytest.raises(SuiteArtifactError, match="refusing to overwrite"):
+        write_evaluated_suite_artifacts(suite, output_directory)
+
+    assert paths.clean_run.read_text(encoding="utf-8") == original
+
+
+def test_rejects_mismatched_raw_runs_and_evaluation() -> None:
+    execution = suite_execution()
+    evaluation = evaluate_suite_execution(
+        execution,
+        SPEC,
+        generation_record(),
+        evaluation_id="evaluation-deepseek-r1",
+    ).model_copy(update={"clean_run_id": "another-clean-run"})
+
+    with pytest.raises(ValueError, match="reference the execution clean run"):
+        EvaluatedSuite(execution=execution, evaluation=evaluation)

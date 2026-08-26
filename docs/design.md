@@ -225,6 +225,9 @@ Implemented as of 2026-08-27:
   cleanup, covered by a real-HTTP end-to-end test.
 - Strict single-suite evaluation with admission, execution, coverage,
   efficiency, and five-state fault outcomes correlated to response evidence.
+- A single-suite pipeline that connects one frozen batch to execution and
+  evaluation, with separate raw clean/fault `RunResult` files and one derived
+  `EvaluationResult` artifact protected from accidental overwrite.
 - Paired multi-suite/repetition aggregation with raw and normalized metrics,
   missing-value accounting, per-fault stability, and deterministic JSON and
   Markdown report output through `oate report compare`.
@@ -1123,6 +1126,9 @@ Secrets and unredacted authorization values are never stored in artifacts.
 Current manual generation commands write the validated cases, generation
 record, and raw output to three caller-selected paths. The benchmark
 orchestrator will copy those immutable inputs into the run-scoped layout above.
+The single-suite pipeline already writes the `execution/` and `evaluation/`
+subtrees; the future top-level benchmark command will add the manifest,
+generation inputs, repetition loop, and final comparison reports.
 
 ## 17. Command-line Interface
 
@@ -1138,6 +1144,9 @@ oate cases validate --spec <openapi-file> --cases <cases>
 oate cases run --spec <openapi-file> --cases <cases> --base-url <url>
 oate plan validate --spec <openapi-file> --plan <plan>
 oate run --spec <openapi-file> --plan <plan> --base-url <url>
+oate benchmark run-suite --spec <openapi-file> --cases <cases> \
+  --source-record <generation-or-adaptation-record> [...] \
+  --output-directory <suite-repetition-directory>
 oate benchmark --config <benchmark-config>
 oate report compare --evaluation <evaluation-json> [...] \
   --json-output <comparison-json> --markdown-output <comparison-markdown>
@@ -1145,9 +1154,10 @@ oate report compare --evaluation <evaluation-json> [...] \
 
 Command output is concise for humans and supports JSON mode for CI.
 `oate cases generate`, `oate cases generate-baseline`, `oate cases validate`,
-`oate cases run`, `oate plan validate`, `oate plan schema`, `oate run`, and
-`oate report compare` are currently implemented. The benchmark command remains
-planned. Run commands repeat semantic validation before opening the transport, execute cases
+`oate cases run`, `oate plan validate`, `oate plan schema`, `oate run`,
+`oate benchmark run-suite`, and `oate report compare` are currently
+implemented. The multi-suite benchmark-config command remains planned. Run commands
+repeat semantic validation before opening the transport, execute cases
 serially with isolated variable scopes, and return nonzero for failed or
 errored runs while preserving the `RunResult` JSON. The supplied base URL is the
 sole target origin and redirects are disabled. Mutating cases require the

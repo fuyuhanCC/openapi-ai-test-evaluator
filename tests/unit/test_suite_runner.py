@@ -7,7 +7,10 @@ from openapi_ai_test_evaluator.domain.execution import (
     ExecutionOutcome,
     FaultTriggerStatus,
 )
+from openapi_ai_test_evaluator.domain.fault import FAULT_ID_RESPONSE_HEADER
+from openapi_ai_test_evaluator.domain.generation import AdaptationRecord
 from openapi_ai_test_evaluator.domain.test_case import TestCaseBatch as CaseBatch
+from openapi_ai_test_evaluator.evaluation import EvaluationInputError, run_evaluated_suite
 from openapi_ai_test_evaluator.evaluation.suite_runner import (
     BenchmarkControlError,
     execute_fault_suite,
@@ -67,7 +70,11 @@ class FakeBenchmark:
         self.events.append("execute-list")
         if self.active_fault == "status-fault":
             self.trigger_count += 1
-            return httpx.Response(500, json={"items": [], "offset": 0, "limit": 20, "total": 0})
+            return httpx.Response(
+                500,
+                headers={FAULT_ID_RESPONSE_HEADER: "status-fault"},
+                json={"items": [], "offset": 0, "limit": 20, "total": 0},
+            )
         return httpx.Response(
             200,
             json={"items": [], "offset": 0, "limit": 20, "total": 0},
@@ -141,6 +148,69 @@ def test_rejects_duplicate_fault_ids_before_control_requests() -> None:
             proxy_control_url="http://proxy.test",
             sut_reset_url="http://sut.test/__test__/reset",
             fault_ids=["same-fault", "same-fault"],
+        )
+
+
+def test_connects_one_suite_execution_to_its_evaluation() -> None:
+    benchmark = FakeBenchmark()
+    evaluated = run_evaluated_suite(
+        BATCH,
+        SPEC,
+        AdaptationRecord(
+            schema_version="1.0",
+            kind="AdaptationRecord",
+            tool="schemathesis",
+            tool_version="4.25.2",
+            adapter_version="schemathesis-case-v1",
+            seed=7,
+            duration_ms=2,
+            received_case_count=1,
+            adapted_case_count=1,
+            rejected_case_count=0,
+            skip_reasons=[],
+        ),
+        suite_id="schemathesis",
+        repetition=1,
+        evaluation_id="evaluation-schemathesis-r1",
+        runner_base_url="http://proxy.test",
+        proxy_control_url="http://proxy.test",
+        sut_reset_url="http://sut.test/__test__/reset",
+        fault_ids=["status-fault"],
+        execution_transport=httpx.MockTransport(benchmark.handle_execution),
+        control_transport=httpx.MockTransport(benchmark.handle_control),
+    )
+
+    assert evaluated.execution.clean.run_id == "schemathesis-r1-clean"
+    assert evaluated.evaluation.clean_run_id == evaluated.execution.clean.run_id
+    assert evaluated.evaluation.generator.name == "schemathesis"
+    assert evaluated.evaluation.fault_summary.detected_fault_count == 1
+    assert evaluated.evaluation.faults[0].run_id == "schemathesis-r1-status-fault"
+
+
+def test_rejects_source_record_count_before_any_control_request() -> None:
+    with pytest.raises(EvaluationInputError, match="does not match the frozen batch"):
+        run_evaluated_suite(
+            BATCH,
+            SPEC,
+            AdaptationRecord(
+                schema_version="1.0",
+                kind="AdaptationRecord",
+                tool="schemathesis",
+                tool_version="4.25.2",
+                adapter_version="schemathesis-case-v1",
+                seed=7,
+                received_case_count=2,
+                adapted_case_count=2,
+                rejected_case_count=0,
+                skip_reasons=[],
+            ),
+            suite_id="schemathesis",
+            repetition=1,
+            evaluation_id="evaluation-schemathesis-r1",
+            runner_base_url="http://proxy.test",
+            proxy_control_url="http://proxy.test",
+            sut_reset_url="http://sut.test/__test__/reset",
+            fault_ids=["status-fault"],
         )
 
 

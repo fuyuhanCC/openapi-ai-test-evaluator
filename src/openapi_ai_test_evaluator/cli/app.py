@@ -22,6 +22,15 @@ from openapi_ai_test_evaluator.domain import (
     TestPlan,
 )
 from openapi_ai_test_evaluator.domain.execution import ExecutionOutcome
+from openapi_ai_test_evaluator.evaluation import (
+    BenchmarkControlError,
+    EvaluationInputError,
+    SourceRecordLoadError,
+    SuiteArtifactError,
+    load_source_record,
+    run_evaluated_suite,
+    write_evaluated_suite_artifacts,
+)
 from openapi_ai_test_evaluator.execution import execute_test_case_batch, execute_test_plan
 from openapi_ai_test_evaluator.generation import (
     PROMPT_VERSION,
@@ -64,9 +73,14 @@ report_app = typer.Typer(
     help="Compare evaluated generator suites and render reports.",
     no_args_is_help=True,
 )
+benchmark_app = typer.Typer(
+    help="Execute reproducible clean-versus-fault benchmark suites.",
+    no_args_is_help=True,
+)
 app.add_typer(plan_app, name="plan")
 app.add_typer(cases_app, name="cases")
 app.add_typer(report_app, name="report")
+app.add_typer(benchmark_app, name="benchmark")
 
 
 class GenerationProviderChoice(StrEnum):
@@ -75,6 +89,174 @@ class GenerationProviderChoice(StrEnum):
 
 class BaselineToolChoice(StrEnum):
     SCHEMATHESIS = "schemathesis"
+
+
+@benchmark_app.command("run-suite")
+def run_benchmark_suite(
+    spec: Annotated[
+        Path,
+        typer.Option("--spec", exists=True, file_okay=True, dir_okay=False, readable=True),
+    ],
+    cases: Annotated[
+        Path,
+        typer.Option("--cases", exists=True, file_okay=True, dir_okay=False, readable=True),
+    ],
+    source_record: Annotated[
+        Path,
+        typer.Option(
+            "--source-record",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            help="GenerationRecord or AdaptationRecord JSON for these cases.",
+        ),
+    ],
+    suite_id: Annotated[
+        str,
+        typer.Option("--suite-id", help="Stable generator-suite identifier."),
+    ],
+    runner_base_url: Annotated[
+        str,
+        typer.Option("--runner-base-url", help="Fault-proxy URL used for measured traffic."),
+    ],
+    proxy_control_url: Annotated[
+        str,
+        typer.Option("--proxy-control-url", help="Fault-proxy control URL."),
+    ],
+    sut_reset_url: Annotated[
+        str,
+        typer.Option("--sut-reset-url", help="Direct SUT reset endpoint outside measured traffic."),
+    ],
+    fault_ids: Annotated[
+        list[str],
+        typer.Option("--fault", help="Fault ID to execute; repeat for every configured fault."),
+    ],
+    output_directory: Annotated[
+        Path,
+        typer.Option("--output-directory", file_okay=False, dir_okay=True),
+    ],
+    repetition: Annotated[
+        int,
+        typer.Option("--repetition", min=1, help="One-based paired repetition number."),
+    ] = 1,
+    evaluation_id: Annotated[
+        str | None,
+        typer.Option("--evaluation-id", help="Defaults to evaluation-<suite>-r<repetition>."),
+    ] = None,
+    timeout_ms: Annotated[
+        int,
+        typer.Option("--timeout-ms", min=1, help="Control and per-request timeout."),
+    ] = 5000,
+    allow_mutations: Annotated[
+        bool,
+        typer.Option(
+            "--allow-mutations",
+            help="Confirm that mutating cases target an isolated benchmark environment.",
+        ),
+    ] = False,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Allow replacing an existing suite artifact set."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit a machine-readable command summary."),
+    ] = False,
+) -> None:
+    """Run and evaluate one frozen generator suite in one repetition."""
+    batch, openapi_spec = _load_validated_case_inputs(cases, spec, json_output)
+    try:
+        record = load_source_record(source_record)
+    except SourceRecordLoadError as error:
+        _report_benchmark_error("source-record", error, json_output)
+
+    _prepare_benchmark_output(
+        output_directory,
+        [spec, cases, source_record],
+        overwrite,
+        json_output,
+    )
+    actual_evaluation_id = evaluation_id or f"evaluation-{suite_id}-r{repetition}"
+    try:
+        evaluated = run_evaluated_suite(
+            batch,
+            openapi_spec,
+            record,
+            suite_id=suite_id,
+            repetition=repetition,
+            evaluation_id=actual_evaluation_id,
+            runner_base_url=runner_base_url,
+            proxy_control_url=proxy_control_url,
+            sut_reset_url=sut_reset_url,
+            fault_ids=fault_ids,
+            timeout_ms=timeout_ms,
+            allow_mutations=allow_mutations,
+        )
+    except (BenchmarkControlError, EvaluationInputError, ValidationError, ValueError) as error:
+        _report_benchmark_error("execution", error, json_output)
+
+    try:
+        paths = write_evaluated_suite_artifacts(
+            evaluated,
+            output_directory,
+            overwrite=overwrite,
+        )
+    except SuiteArtifactError as error:
+        _report_benchmark_error("artifacts", error, json_output)
+
+    summary = {
+        "status": "completed",
+        "evaluation_id": evaluated.evaluation.evaluation_id,
+        "suite_id": evaluated.evaluation.suite_id,
+        "repetition": evaluated.evaluation.repetition,
+        "clean_outcome": evaluated.execution.clean.outcome.value,
+        "configured_faults": evaluated.evaluation.fault_summary.configured_fault_count,
+        "detected_faults": evaluated.evaluation.fault_summary.detected_fault_count,
+        "output_directory": str(output_directory),
+        "evaluation_output": str(paths.evaluation),
+    }
+    if json_output:
+        typer.echo(json.dumps(summary))
+    else:
+        typer.echo(
+            f"Evaluation {summary['evaluation_id']}: completed "
+            f"({summary['detected_faults']}/{summary['configured_faults']} faults detected); "
+            f"wrote {output_directory}"
+        )
+
+
+def _prepare_benchmark_output(
+    output_directory: Path,
+    input_paths: list[Path],
+    overwrite: bool,
+    json_output: bool,
+) -> None:
+    resolved_output = output_directory.resolve()
+    if any(path.resolve().is_relative_to(resolved_output) for path in input_paths):
+        _report_benchmark_error(
+            "artifacts",
+            ValueError("benchmark output directory cannot contain an input artifact"),
+            json_output,
+        )
+    if output_directory.exists() and not overwrite:
+        _report_benchmark_error(
+            "artifacts",
+            ValueError(f"refusing to reuse existing output directory: {output_directory}"),
+            json_output,
+        )
+
+
+def _report_benchmark_error(
+    stage: str,
+    error: Exception,
+    json_output: bool,
+) -> NoReturn:
+    if json_output:
+        typer.echo(json.dumps({"status": "not_started", "stage": stage, "error": str(error)}))
+    else:
+        typer.echo(f"Cannot run benchmark suite ({stage}): {error}", err=True)
+    raise typer.Exit(code=1)
 
 
 @report_app.command("compare")

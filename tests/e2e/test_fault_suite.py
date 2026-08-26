@@ -17,10 +17,7 @@ from openapi_ai_test_evaluator.domain.execution import (
 )
 from openapi_ai_test_evaluator.domain.generation import AdaptationRecord
 from openapi_ai_test_evaluator.domain.test_case import TestCaseBatch as CaseBatch
-from openapi_ai_test_evaluator.evaluation import (
-    evaluate_suite_execution,
-    execute_fault_suite,
-)
+from openapi_ai_test_evaluator.evaluation import run_evaluated_suite
 from openapi_ai_test_evaluator.spec import load_openapi
 from services.demo_items.app import app as demo_app
 from services.demo_items.app import reset_state
@@ -127,19 +124,8 @@ def test_runs_one_frozen_batch_through_clean_and_all_fault_states() -> None:
     with run_server(demo_app) as demo_url:
         proxy_app = create_app(demo_url, faults=FAULTS)
         with run_server(proxy_app) as proxy_url:
-            execution = execute_fault_suite(
+            evaluated = run_evaluated_suite(
                 BATCH,
-                SPEC,
-                suite_id="reference-suite",
-                repetition=1,
-                runner_base_url=proxy_url,
-                proxy_control_url=proxy_url,
-                sut_reset_url=f"{demo_url}/__test__/reset",
-                fault_ids=[fault.fault_id for fault in FAULTS],
-                allow_mutations=True,
-            )
-            evaluation = evaluate_suite_execution(
-                execution,
                 SPEC,
                 AdaptationRecord(
                     schema_version="1.0",
@@ -153,9 +139,19 @@ def test_runs_one_frozen_batch_through_clean_and_all_fault_states() -> None:
                     rejected_case_count=0,
                     skip_reasons=[],
                 ),
+                suite_id="reference-suite",
+                repetition=1,
                 evaluation_id="evaluation-reference-r1",
+                runner_base_url=proxy_url,
+                proxy_control_url=proxy_url,
+                sut_reset_url=f"{demo_url}/__test__/reset",
+                fault_ids=[fault.fault_id for fault in FAULTS],
+                allow_mutations=True,
             )
             final_state = httpx.get(f"{proxy_url}/__oate__/state", trust_env=False)
+
+    execution = evaluated.execution
+    evaluation = evaluated.evaluation
 
     assert execution.clean.outcome is ExecutionOutcome.PASSED
     assert all(

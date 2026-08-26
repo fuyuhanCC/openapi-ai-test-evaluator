@@ -115,6 +115,18 @@ def evaluate_suite_execution(
     )
 
 
+def validate_source_record_case_count(
+    source_record: GenerationRecord | AdaptationRecord,
+    case_count: int,
+) -> None:
+    """Reject a source record that does not describe the frozen executable batch."""
+    _, admission = _source_metrics(source_record)
+    if admission.admitted_case_count != case_count:
+        raise EvaluationInputError(
+            "source record admitted case count does not match the frozen batch"
+        )
+
+
 def _source_metrics(
     record: GenerationRecord | AdaptationRecord,
 ) -> tuple[GeneratorMetadata, CaseAdmissionMetrics]:
@@ -312,4 +324,8 @@ def _fault_summary(
     )
 
 
-__all__ = ["EvaluationInputError", "evaluate_suite_execution"]
+__all__ = [
+    "EvaluationInputError",
+    "evaluate_suite_execution",
+    "validate_source_record_case_count",
+]

@@ -65,6 +65,9 @@ oracles.
 - Strict per-suite `EvaluationResult` metrics for admission, executable cases,
   clean false positives, operation coverage, request counts, and fault
   detection with same-case proxy evidence.
+- A single-suite pipeline that connects one frozen batch to clean/fault
+  execution and evaluation, then preserves the clean run, every fault run, and
+  `EvaluationResult` as separate JSON artifacts without overwriting by default.
 - Strict multi-suite `ComparisonResult` aggregation across paired repetitions,
   including raw suite size, normalized efficiency, mean/standard deviation,
   missing-value accounting, and per-fault outcome stability.
@@ -141,13 +144,48 @@ eligible requests into the common `TestCaseBatch` and records every rejected
 case category in an `AdaptationRecord`. HTTP requests are sent only later
 through `oate cases run`.
 
-Once clean-versus-fault executions have been reduced to `EvaluationResult`
-artifacts, compare paired DeepSeek and Schemathesis repetitions:
+Start the Demo Items SUT and fault proxy in two separate terminals:
+
+```bash
+uv run uvicorn services.demo_items.app:app --host 127.0.0.1 --port 8000
+```
+
+```bash
+OATE_FAULT_PROXY_UPSTREAM=http://127.0.0.1:8000 \
+OATE_FAULT_PROXY_FAULTS=benchmarks/demo_items/faults \
+uv run uvicorn services.fault_proxy.app:app --host 127.0.0.1 --port 8001
+```
+
+Then run and evaluate one already-generated Schemathesis suite. Repeat `--fault`
+for every fault in the frozen catalog:
+
+```bash
+uv run oate benchmark run-suite \
+  --spec examples/demo-items/openapi.yaml \
+  --cases artifacts/cases/schemathesis-demo-001.json \
+  --source-record artifacts/adaptations/schemathesis-demo-001.json \
+  --suite-id schemathesis \
+  --repetition 1 \
+  --runner-base-url http://127.0.0.1:8001 \
+  --proxy-control-url http://127.0.0.1:8001 \
+  --sut-reset-url http://127.0.0.1:8000/__test__/reset \
+  --fault get-id-as-string \
+  --fault get-missing-name \
+  --fault get-status-error \
+  --fault list-duplicate-first-item \
+  --output-directory artifacts/runs/schemathesis-r1 \
+  --allow-mutations
+```
+
+The command writes the clean `RunResult`, one `RunResult` per fault, and the
+derived `EvaluationResult` to separate files. Existing output directories are
+rejected unless `--overwrite` is explicit. Run the same command with the
+DeepSeek cases and `GenerationRecord`, then compare the paired evaluations:
 
 ```bash
 uv run oate report compare \
-  --evaluation artifacts/evaluations/deepseek-r1.json \
-  --evaluation artifacts/evaluations/schemathesis-r1.json \
+  --evaluation artifacts/runs/deepseek-r1/evaluation/evaluation.json \
+  --evaluation artifacts/runs/schemathesis-r1/evaluation/evaluation.json \
   --comparison-id deepseek-vs-schemathesis \
   --json-output artifacts/reports/comparison.json \
   --markdown-output artifacts/reports/comparison.md
