@@ -202,13 +202,15 @@ With no fault enabled, the proxy operates in transparent pass-through mode.
 
 ### 7.1 Current implementation checkpoint
 
-Implemented as of 2026-08-25:
+Implemented as of 2026-08-26:
 
 - OpenAPI 3.0/3.1 common-scope loading, normalization, and static validation.
 - Strict `TestCaseBatch`, `GenerationConfig`, `GenerationRecord`, and
   `RunResult` contracts.
 - Versioned LLM prompts, the DeepSeek HTTP adapter, raw-output preservation, and
   the `oate cases generate` command.
+- Schemathesis examples, coverage, and per-operation fuzzing generation with
+  explicit adaptation metrics and `oate cases generate-baseline`.
 - Structural and OpenAPI semantic validation for generated cases.
 - Deterministic HTTP execution with variables, assertions, extractions,
   setup/main/cleanup, and all six declared relation types.
@@ -217,7 +219,6 @@ Implemented as of 2026-08-25:
 
 Still required for the V1 experiment:
 
-- Schemathesis adapter and budget-normalized baseline execution.
 - PetClinic benchmark packaging and deterministic reset workflow.
 - Fault proxy, fault catalog, and reference tests.
 - Experiment orchestration, aggregate evaluation, reports, Docker Compose, and
@@ -330,13 +331,16 @@ including model, prompt version, maximum cases, maximum steps per case,
 temperature, output-token limit, and timeout.
 
 `GenerationRecord` stores one attempt's provider, model, prompt version,
-provider request identifier, timestamps, duration, status, token usage, and
-sanitized error. The validated `TestCaseBatch`, `GenerationRecord`, and raw
-provider output are separate artifacts. The raw output is preserved whenever a
-provider response is received, including responses that later fail structural,
-budget, or OpenAPI semantic validation.
+provider request identifier, timestamps, duration, status, token usage,
+sanitized error, and optional per-case admission summary. Once the root batch
+envelope is decoded, every LLM-produced case is independently checked for
+structure, generation limits, and OpenAPI semantics. Valid cases are admitted;
+invalid cases are counted by index, stage, stable code, and optional case ID.
+The validated `TestCaseBatch`, `GenerationRecord`, and raw provider output are
+separate artifacts. Raw output is preserved whenever a provider response is
+received, including partially admitted attempts.
 
-The Schemathesis adapter will produce an `AdaptationRecord` with the tool
+The Schemathesis adapter produces an `AdaptationRecord` with the tool
 version and seed, received case count, adapted case count, rejected case count,
 and stable skip reasons. This prevents an adapter failure from being counted as
 a generator failure or silently disappearing from the denominator.
@@ -609,16 +613,19 @@ does not implement a competing rule generator because a weak custom baseline
 would make the experiment measure baseline quality rather than the difference
 between conventional and LLM-based generation.
 
-The primary controlled experiment adapts eligible Schemathesis-generated
+The primary native-suite experiment adapts eligible Schemathesis-generated
 requests into `TestCaseBatch` so they receive the same semantic checks, runner,
-deterministic oracles, request budget, fault set, and result format as LLM
-cases. Adapter limitations and dropped cases are explicit metrics, not silent
-losses.
+deterministic oracles, fault set, and result format as LLM cases. It executes all
+admitted cases from both generators rather than imposing a shared HTTP request
+limit. Different suite sizes are explicit measurements, not silently normalized
+away, and efficiency is additionally reported per 100 requests.
 
-Schemathesis version, mode, seed, generation limit, request limit, and wall-time
-limit are frozen in the experiment manifest. Concrete negative requests must
-declare the contract violations detected by the common semantic validator
-before they become executable `intentionally_invalid` cases.
+Schemathesis generates all finite explicit-example and coverage cases. Because
+fuzzing has no natural endpoint, its positive and negative sample counts are
+frozen per OpenAPI operation together with the Schemathesis version and seed.
+Concrete negative requests must declare the contract violations detected by the
+common semantic validator before they become executable `intentionally_invalid`
+cases.
 
 Schemathesis-native stateful workflows or future modes that cannot be normalized
 without changing their semantics may be run as a labeled secondary external
@@ -641,8 +648,8 @@ The LLM generation pipeline is responsible for:
 - Enforcing case, step, token, duration, and cost budgets.
 - Mapping timeouts, transport errors, rate limits, and invalid responses into
   stable generation statuses.
-- Validating the returned `TestCaseBatch` structurally and against the source
-  OpenAPI document.
+- Admitting returned cases independently after structural, configured-limit,
+  and source-OpenAPI semantic validation.
 - Recording token usage, latency, model identifier, validated cases, generation
   metadata, and raw provider output as separate artifacts.
 
@@ -944,43 +951,44 @@ is frozen.
 
 ## 14. Experiment Design
 
-### 14.1 Arms
+### 14.1 Comparison modes
 
-| Arm | Base test generation | Metamorphic expansion |
-| --- | --- | --- |
-| A | Schemathesis adapter | Disabled |
-| B | The exact base batch produced for A | Enabled |
-| C | Configured LLM provider | Disabled |
-| D | The exact base batch produced for C | Enabled |
+The first report uses a tool-native full-suite comparison:
 
-A/B and C/D form paired comparisons. B and D only add deterministic
-metamorphic follow-up tests to their corresponding base batches, isolating the
-value of metamorphic expansion from both generator choice and LLM sampling
-variance. Stateful lifecycle test cases are normal base-batch capabilities and
-may appear in every arm; they are not added only to the metamorphic arms.
+| Suite | Generation policy |
+| --- | --- |
+| Schemathesis native | All finite examples and coverage cases, plus frozen per-operation fuzzing samples |
+| LLM native | One full-document generation attempt, followed by per-case admission |
 
-The primary comparison does not require Schemathesis and an LLM to generate
-identical cases—that would remove the behavior being evaluated. Fairness comes
-from using the same OpenAPI document, SUT state, request and time budgets, fault
-set, clean-baseline eligibility rule, deterministic oracles, and metric
-definitions. The exact generated base batch is frozen before its paired
-metamorphic arm is derived.
+Both suites execute every admitted case. They are not truncated to the same
+number of cases or HTTP requests because that would hide a meaningful property
+of each generator. The report therefore presents raw effectiveness together
+with per-request efficiency and cumulative detection curves.
+
+When additional LLM providers are integrated, a separate `controlled_llm`
+comparison freezes the prompt, provider-call count, output-token limit,
+temperature where supported, case/step limits, SUT state, fault set, and
+repetitions. This controls comparable model-generation resources without
+pretending that a schema-driven tool and an LLM have the same generation model.
+
+Metamorphic expansion remains a later labeled ablation. It is not mixed into
+the first Schemathesis-versus-LLM report.
 
 ### 14.2 Protocol
 
-The benchmark uses three paired repetitions. For each repetition:
+The benchmark uses three environment-paired repetitions. For each repetition:
 
 1. Record the complete configuration and environment manifest.
 2. Produce one adapted Schemathesis batch and one independent batch from the
    configured LLM provider.
-3. Derive B deterministically from A and D deterministically from C.
-4. Reset PetClinic to a known state.
-5. Execute each batch through the proxy in pass-through mode.
+3. Freeze both admitted batches before execution.
+4. Reset the SUT to a known state.
+5. Execute each complete batch through the proxy in pass-through mode.
 6. Exclude or diagnose tests that fail on the clean baseline.
 7. Reset the SUT before every injected fault.
 8. Enable exactly one fault.
 9. Execute the eligible tests and confirm that the fault triggered.
-10. Store raw results before calculating aggregates.
+10. Store raw results before calculating raw, normalized, and cumulative metrics.
 
 Feedback and holdout results are reported separately. Prompt and generator
 changes stop after the holdout set is frozen.
@@ -1223,7 +1231,7 @@ V1 is complete when:
    have unit tests and executable examples.
 6. All 12 PetClinic faults can be enabled independently and have reference
    tests.
-7. Three complete four-arm repetitions have been recorded.
+7. Three complete native-suite repetitions have been recorded.
 8. JSON, JUnit XML, and HTML reports are generated from the same raw results.
 9. `uv run pytest` passes in a clean checkout.
 10. Docker Compose reproduces the PetClinic benchmark environment.

@@ -5,13 +5,12 @@ documents and evaluating their fault-detection capability with deterministic
 oracles.
 
 > **Current status:** provider-independent TestCaseBatch generation and execution
-> are implemented for the supported OpenAPI 3.0/3.1 scope. The generation path
-> includes normalized OpenAPI context, a versioned prompt, a DeepSeek HTTP
-> adapter, structural and semantic output validation, and separate validated,
-> metadata, and raw-output artifacts. The deterministic HTTP runner supports assertions,
-> extraction, setup/main/cleanup sequencing, and metamorphic/lifecycle
-> relations. Schemathesis integration, benchmark services, fault injection, and
-> aggregate experiment reports remain to be implemented.
+> are implemented for the supported OpenAPI 3.0/3.1 scope. DeepSeek and
+> Schemathesis both produce the same runner-ready contract with separate raw,
+> generation, and adaptation artifacts. The deterministic HTTP runner supports
+> assertions, extraction, setup/main/cleanup sequencing, and
+> metamorphic/lifecycle relations. Fault injection, experiment orchestration,
+> and aggregate reports remain to be implemented.
 
 ## What works today
 
@@ -21,6 +20,8 @@ oracles.
 - Mature OpenAPI validators for document conformance and static Schema value
   checking, with project-specific error mapping for TestPlan semantics.
 - Structural TestPlan validation plus plan-to-OpenAPI semantic validation.
+- DeepSeek generation and Schemathesis examples/coverage/fuzzing adaptation into
+  the common `TestCaseBatch` contract.
 - Positive, negative, stateful, and metamorphic TestPlan examples.
 - Strict RunResult contracts for requests, responses, assertions, extractions,
   relations, faults, and structured errors.
@@ -92,11 +93,13 @@ uv run oate cases generate \
   --raw-output artifacts/raw/deepseek-demo-001.txt
 ```
 
-The cases artifact is written only when the model output passes structural,
-generation-limit, and OpenAPI semantic validation. The GenerationRecord is
-written for both successful and failed provider attempts. Whenever the provider
-returns content, that unvalidated text is also preserved—even if it fails later
-validation—so failed generations can be inspected and reproduced. The default
+The cases artifact is written when the provider returns a valid batch envelope
+with at least one independently admitted case. Each case passes structural,
+generation-limit, and OpenAPI semantic validation; rejected cases remain in the
+raw output and are counted with stable reasons in `GenerationRecord.case_admission`.
+The GenerationRecord is written for both successful and failed provider attempts.
+Whenever the provider returns content, that unvalidated text is also preserved,
+so failed and partially admitted generations can be inspected. The default
 `api-cases-v3` prompt explicitly counts setup, main, and cleanup requests toward
 the same per-case step limit and demonstrates the object syntax required for
 runtime variable references. Existing artifact files are not replaced unless
@@ -114,10 +117,11 @@ uv run oate cases generate-baseline \
   --seed 7
 ```
 
-This command draws bounded examples, coverage cases, and positive/negative
-fuzzing cases, adapts eligible requests into the common `TestCaseBatch`, and
-records every rejected case category in an `AdaptationRecord`. HTTP requests are
-sent only later through `oate cases run`.
+This command draws all finite examples and coverage cases plus a bounded number
+of positive/negative fuzzing cases for every OpenAPI operation. It adapts
+eligible requests into the common `TestCaseBatch` and records every rejected
+case category in an `AdaptationRecord`. HTTP requests are sent only later
+through `oate cases run`.
 
 Validate and run a generated batch with the same runner used by every adapted
 generator:

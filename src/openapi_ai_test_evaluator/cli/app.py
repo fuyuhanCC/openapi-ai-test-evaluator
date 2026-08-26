@@ -284,6 +284,17 @@ def _generation_summary(
         summary["cases"] = case_count
     if record.error is not None:
         summary["error"] = record.error.model_dump()
+    if record.case_admission is not None:
+        summary.update(
+            {
+                "received_cases": record.case_admission.received_case_count,
+                "admitted_cases": record.case_admission.admitted_case_count,
+                "rejected_cases": record.case_admission.rejected_case_count,
+                "case_rejections": [
+                    rejection.model_dump() for rejection in record.case_admission.rejections
+                ],
+            }
+        )
     return summary
 
 
@@ -351,25 +362,21 @@ def generate_baseline_cases(
         BaselineToolChoice,
         typer.Option("--tool", help="Conventional test-case generator."),
     ] = BaselineToolChoice.SCHEMATHESIS,
-    example_case_limit: Annotated[
+    include_examples: Annotated[
+        bool,
+        typer.Option("--examples/--no-examples", help="Include all explicit OpenAPI examples."),
+    ] = True,
+    include_coverage: Annotated[
+        bool,
+        typer.Option("--coverage/--no-coverage", help="Include all finite coverage cases."),
+    ] = True,
+    fuzzing_positive_cases_per_operation: Annotated[
         int,
-        typer.Option("--examples", help="Maximum OpenAPI example cases."),
+        typer.Option("--fuzz-pos", help="Positive fuzzing cases per operation."),
     ] = 5,
-    coverage_positive_case_limit: Annotated[
+    fuzzing_negative_cases_per_operation: Annotated[
         int,
-        typer.Option("--coverage-positive", help="Maximum positive coverage cases."),
-    ] = 5,
-    coverage_negative_case_limit: Annotated[
-        int,
-        typer.Option("--coverage-negative", help="Maximum negative coverage cases."),
-    ] = 5,
-    fuzzing_positive_case_count: Annotated[
-        int,
-        typer.Option("--fuzzing-positive", help="Positive fuzzing case count."),
-    ] = 5,
-    fuzzing_negative_case_count: Annotated[
-        int,
-        typer.Option("--fuzzing-negative", help="Negative fuzzing case count."),
+        typer.Option("--fuzz-neg", help="Negative fuzzing cases per operation."),
     ] = 5,
     seed: Annotated[
         int,
@@ -394,11 +401,10 @@ def generate_baseline_cases(
 
     try:
         config = SchemathesisGenerationConfig(
-            example_case_limit=example_case_limit,
-            coverage_positive_case_limit=coverage_positive_case_limit,
-            coverage_negative_case_limit=coverage_negative_case_limit,
-            fuzzing_positive_case_count=fuzzing_positive_case_count,
-            fuzzing_negative_case_count=fuzzing_negative_case_count,
+            include_examples=include_examples,
+            include_coverage=include_coverage,
+            fuzzing_positive_cases_per_operation=fuzzing_positive_cases_per_operation,
+            fuzzing_negative_cases_per_operation=fuzzing_negative_cases_per_operation,
             seed=seed,
         )
     except ValidationError as error:

@@ -39,6 +39,86 @@ def test_accepts_successful_llm_generation_record() -> None:
     assert record.estimated_cost_usd == 0.0008
 
 
+def test_accepts_per_case_admission_metrics() -> None:
+    raw = successful_record()
+    raw["case_admission"] = {
+        "received_case_count": 3,
+        "admitted_case_count": 2,
+        "rejected_case_count": 1,
+        "rejections": [
+            {
+                "index": 1,
+                "case_id": "bad-case",
+                "stage": "semantic",
+                "code": "case_semantics_invalid",
+                "detail_codes": ["unknown_operation"],
+            }
+        ],
+    }
+
+    record = GenerationRecord.model_validate(raw)
+
+    assert record.case_admission is not None
+    assert record.case_admission.admitted_case_count == 2
+    assert record.case_admission.rejections[0].detail_codes == ["unknown_operation"]
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"received_case_count": 4},
+        {"rejected_case_count": 2},
+        {
+            "rejections": [
+                {
+                    "index": 3,
+                    "stage": "structure",
+                    "code": "case_structure_invalid",
+                }
+            ]
+        },
+    ],
+)
+def test_rejects_inconsistent_case_admission_metrics(changes: dict[str, object]) -> None:
+    raw = successful_record()
+    admission: dict[str, object] = {
+        "received_case_count": 3,
+        "admitted_case_count": 2,
+        "rejected_case_count": 1,
+        "rejections": [
+            {
+                "index": 1,
+                "stage": "structure",
+                "code": "case_structure_invalid",
+            }
+        ],
+    }
+    admission.update(changes)
+    raw["case_admission"] = admission
+
+    with pytest.raises(ValidationError):
+        GenerationRecord.model_validate(raw)
+
+
+def test_rejects_success_record_with_zero_admitted_cases() -> None:
+    raw = successful_record()
+    raw["case_admission"] = {
+        "received_case_count": 1,
+        "admitted_case_count": 0,
+        "rejected_case_count": 1,
+        "rejections": [
+            {
+                "index": 0,
+                "stage": "structure",
+                "code": "case_structure_invalid",
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError, match="require an admitted case"):
+        GenerationRecord.model_validate(raw)
+
+
 def test_accepts_tool_baseline_without_model_or_tokens() -> None:
     raw = successful_record()
     raw.update(

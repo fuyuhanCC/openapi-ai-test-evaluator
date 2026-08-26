@@ -74,11 +74,14 @@ def test_runs_complete_generation_pipeline_with_fake_provider() -> None:
     assert attempt.record.status is GenerationStatus.SUCCEEDED
     assert attempt.record.prompt_version == PROMPT_VERSION
     assert attempt.record.token_usage.total_tokens == 120
+    assert attempt.record.case_admission is not None
+    assert attempt.record.case_admission.received_case_count == 1
+    assert attempt.record.case_admission.admitted_case_count == 1
     assert attempt.provider_output_text == output([list_case()])
     assert provider.requests == (build_provider_request(spec, generation_config),)
 
 
-def test_rejects_more_cases_than_generation_config_allows() -> None:
+def test_admits_cases_within_limit_and_records_cases_beyond_it() -> None:
     provider = FakeProvider(
         response=response(output([list_case("first-case"), list_case("second-case")]))
     )
@@ -90,11 +93,13 @@ def test_rejects_more_cases_than_generation_config_allows() -> None:
         generation_id="generation-001",
     )
 
-    assert attempt.batch is None
-    assert attempt.record.status is GenerationStatus.INVALID_OUTPUT
-    assert attempt.record.error is not None
-    assert attempt.record.error.code == "generation-limits-exceeded"
-    assert "2 cases; maximum is 1" in attempt.record.error.message
+    assert attempt.batch is not None
+    assert [case.id for case in attempt.batch.cases] == ["first-case"]
+    assert attempt.record.status is GenerationStatus.SUCCEEDED
+    assert attempt.record.error is None
+    assert attempt.record.case_admission is not None
+    assert attempt.record.case_admission.rejected_case_count == 1
+    assert attempt.record.case_admission.rejections[0].code == "case_count_limit_exceeded"
     assert attempt.provider_output_text is not None
 
 
@@ -113,8 +118,9 @@ def test_rejects_case_with_too_many_total_steps() -> None:
 
     assert attempt.batch is None
     assert attempt.record.error is not None
-    assert attempt.record.error.code == "generation-limits-exceeded"
-    assert "3 total steps; maximum is 2" in attempt.record.error.message
+    assert attempt.record.error.code == "no-admitted-test-cases"
+    assert attempt.record.case_admission is not None
+    assert attempt.record.case_admission.rejections[0].code == "case_step_limit_exceeded"
     assert attempt.provider_output_text == output([case])
 
 
@@ -135,6 +141,35 @@ def test_rejects_structurally_valid_cases_that_invent_operations() -> None:
     assert attempt.batch is None
     assert attempt.record.status is GenerationStatus.INVALID_OUTPUT
     assert attempt.record.error is not None
-    assert attempt.record.error.code == "semantic-validation-failed"
-    assert "unknown_operation" in attempt.record.error.message
+    assert attempt.record.error.code == "no-admitted-test-cases"
+    assert attempt.record.case_admission is not None
+    assert attempt.record.case_admission.rejections[0].code == "case_semantics_invalid"
+    assert attempt.record.case_admission.rejections[0].detail_codes == ["unknown_operation"]
     assert attempt.provider_output_text == output([invented_case])
+
+
+def test_keeps_valid_cases_when_other_cases_fail_structure_and_semantics() -> None:
+    cases = [
+        list_case("valid-case"),
+        {"id": "missing-steps"},
+        {
+            "id": "unknown-operation",
+            "steps": [{"id": "call", "operation_id": "inventedOperation"}],
+        },
+    ]
+    provider = FakeProvider(response=response(output(cases)))
+
+    attempt = generate_cases_from_openapi(
+        provider,
+        load_openapi(DEMO_SPEC),
+        config(),
+        generation_id="generation-001",
+    )
+
+    assert attempt.batch is not None
+    assert [case.id for case in attempt.batch.cases] == ["valid-case"]
+    assert attempt.record.status is GenerationStatus.SUCCEEDED
+    assert attempt.record.case_admission is not None
+    assert attempt.record.case_admission.received_case_count == 3
+    assert attempt.record.case_admission.admitted_case_count == 1
+    assert attempt.record.case_admission.rejected_case_count == 2

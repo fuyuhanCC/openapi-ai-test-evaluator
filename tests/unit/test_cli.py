@@ -115,6 +115,9 @@ def test_cases_generate_writes_cases_and_generation_record_with_mock_http(
     summary = json.loads(result.stdout)
     assert summary["status"] == "succeeded"
     assert summary["cases"] == 1
+    assert summary["received_cases"] == 1
+    assert summary["admitted_cases"] == 1
+    assert summary["rejected_cases"] == 0
     assert summary["cases_output"] == str(cases_output)
     assert summary["raw_output"] == str(raw_output)
     assert captured["url"] == "https://api.deepseek.com/chat/completions"
@@ -128,6 +131,7 @@ def test_cases_generate_writes_cases_and_generation_record_with_mock_http(
     assert saved_record["kind"] == "GenerationRecord"
     assert saved_record["generation_id"] == "generation-cli"
     assert saved_record["token_usage"]["total_tokens"] == 120
+    assert saved_record["case_admission"]["admitted_case_count"] == 1
     assert raw_output.read_text(encoding="utf-8") == f"{generated_list_case_batch()}\n"
 
 
@@ -269,15 +273,11 @@ def test_cases_generate_baseline_writes_cases_and_adaptation_record(tmp_path: Pa
             str(cases_output),
             "--record-output",
             str(record_output),
-            "--examples",
-            "0",
-            "--coverage-positive",
-            "0",
-            "--coverage-negative",
-            "0",
-            "--fuzzing-positive",
+            "--no-examples",
+            "--no-coverage",
+            "--fuzz-pos",
             "1",
-            "--fuzzing-negative",
+            "--fuzz-neg",
             "0",
             "--seed",
             "7",
@@ -288,8 +288,8 @@ def test_cases_generate_baseline_writes_cases_and_adaptation_record(tmp_path: Pa
     assert result.exit_code == 0
     summary = json.loads(result.stdout)
     assert summary["status"] == "succeeded"
-    assert summary["received_cases"] == 1
-    assert summary["adapted_cases"] == 1
+    assert summary["received_cases"] == 6
+    assert summary["adapted_cases"] == 6
     assert summary["rejected_cases"] == 0
     assert summary["cases_output"] == str(cases_output)
     saved_cases = json.loads(cases_output.read_text(encoding="utf-8"))
@@ -315,15 +315,11 @@ def test_cases_generate_baseline_rejects_empty_budget_before_writing(tmp_path: P
             str(cases_output),
             "--record-output",
             str(record_output),
-            "--examples",
+            "--no-examples",
+            "--no-coverage",
+            "--fuzz-pos",
             "0",
-            "--coverage-positive",
-            "0",
-            "--coverage-negative",
-            "0",
-            "--fuzzing-positive",
-            "0",
-            "--fuzzing-negative",
+            "--fuzz-neg",
             "0",
             "--json",
         ],

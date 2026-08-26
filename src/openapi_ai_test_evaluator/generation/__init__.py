@@ -1,5 +1,10 @@
 """Provider-independent test-case generation boundaries."""
 
+from openapi_ai_test_evaluator.generation.case_admission import (
+    GeneratedCaseAdmission,
+    ProviderOutputAdmissionError,
+    admit_generated_cases,
+)
 from openapi_ai_test_evaluator.generation.deepseek_provider import (
     DEEPSEEK_API_KEY_ENV,
     DEFAULT_DEEPSEEK_BASE_URL,
@@ -61,10 +66,12 @@ __all__ = [
     "DeepSeekProviderConfigError",
     "FakeProvider",
     "GenerationAttempt",
+    "GeneratedCaseAdmission",
     "LLMProvider",
     "LLMProviderError",
     "ProviderRequest",
     "ProviderResponse",
+    "ProviderOutputAdmissionError",
     "PROMPT_VERSION",
     "RejectedSchemathesisCase",
     "SCHEMATHESIS_ADAPTER_VERSION",
@@ -76,6 +83,7 @@ __all__ = [
     "SchemathesisBatchCollector",
     "PromptBuildError",
     "adapt_schemathesis_case",
+    "admit_generated_cases",
     "build_openapi_context",
     "build_provider_request",
     "capture_schemathesis_case",

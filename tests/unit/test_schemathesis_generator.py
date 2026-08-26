@@ -15,24 +15,28 @@ SPEC_PATH = ROOT / "examples" / "demo-items" / "openapi.yaml"
 SPEC = load_openapi(SPEC_PATH)
 
 
-def test_generates_requested_cases_from_all_available_phases_without_http() -> None:
+def test_generates_all_coverage_and_per_operation_fuzzing_without_http() -> None:
     schema = schemathesis.openapi.from_path(SPEC_PATH)
 
     result = generate_schemathesis_batch(
         schema,
         SPEC,
         SchemathesisGenerationConfig(
-            example_case_limit=0,
-            coverage_positive_case_limit=2,
-            coverage_negative_case_limit=2,
-            fuzzing_positive_case_count=3,
-            fuzzing_negative_case_count=2,
+            include_examples=False,
+            include_coverage=True,
+            fuzzing_positive_cases_per_operation=2,
+            fuzzing_negative_cases_per_operation=1,
             seed=7,
         ),
     )
 
-    assert result.record.received_case_count == 9
-    assert result.record.adapted_case_count + result.record.rejected_case_count == 9
+    # The pinned Schemathesis version emits 236 finite coverage cases for this
+    # six-operation fixture, followed by 3 fuzzing cases per operation.
+    assert result.record.received_case_count == 236 + (6 * 3)
+    assert (
+        result.record.adapted_case_count + result.record.rejected_case_count
+        == result.record.received_case_count
+    )
     assert result.record.seed == 7
     if result.batch is not None:
         phases = {
@@ -46,11 +50,10 @@ def test_generates_requested_cases_from_all_available_phases_without_http() -> N
 
 def test_generation_is_reproducible_for_the_same_seed() -> None:
     config = SchemathesisGenerationConfig(
-        example_case_limit=0,
-        coverage_positive_case_limit=2,
-        coverage_negative_case_limit=2,
-        fuzzing_positive_case_count=3,
-        fuzzing_negative_case_count=2,
+        include_examples=False,
+        include_coverage=False,
+        fuzzing_positive_cases_per_operation=2,
+        fuzzing_negative_cases_per_operation=1,
         seed=19,
     )
 
@@ -67,23 +70,23 @@ def test_generation_is_reproducible_for_the_same_seed() -> None:
     assert second.record == first.record
 
 
-def test_can_allocate_the_whole_budget_to_one_generation_mode() -> None:
+def test_fuzzing_count_applies_to_every_openapi_operation() -> None:
     result = generate_schemathesis_batch(
         schemathesis.openapi.from_path(SPEC_PATH),
         SPEC,
         SchemathesisGenerationConfig(
-            example_case_limit=0,
-            coverage_positive_case_limit=0,
-            coverage_negative_case_limit=0,
-            fuzzing_positive_case_count=2,
-            fuzzing_negative_case_count=0,
+            include_examples=False,
+            include_coverage=False,
+            fuzzing_positive_cases_per_operation=2,
+            fuzzing_negative_cases_per_operation=0,
             seed=3,
         ),
     )
 
-    assert result.record.received_case_count == 2
+    assert result.record.received_case_count == 12
     if result.batch is not None:
         assert all("mode:positive" in case.tags for case in result.batch.cases)
+        assert {case.steps[0].operation_id for case in result.batch.cases} == set(SPEC.operations)
 
 
 def test_collects_explicit_openapi_examples() -> None:
@@ -95,11 +98,10 @@ def test_collects_explicit_openapi_examples() -> None:
         schema,
         SPEC,
         SchemathesisGenerationConfig(
-            example_case_limit=1,
-            coverage_positive_case_limit=0,
-            coverage_negative_case_limit=0,
-            fuzzing_positive_case_count=0,
-            fuzzing_negative_case_count=0,
+            include_examples=True,
+            include_coverage=False,
+            fuzzing_positive_cases_per_operation=0,
+            fuzzing_negative_cases_per_operation=0,
             seed=5,
         ),
     )
@@ -110,26 +112,20 @@ def test_collects_explicit_openapi_examples() -> None:
     assert result.batch.cases[0].steps[0].request.query[0].value == 7
 
 
-@pytest.mark.parametrize("changes", [{}, {"example_case_limit": -1}])
-def test_rejects_invalid_generation_budgets(changes: dict[str, int]) -> None:
+def test_rejects_configuration_without_any_generation_source() -> None:
     values = {
-        "example_case_limit": 0,
-        "coverage_positive_case_limit": 0,
-        "coverage_negative_case_limit": 0,
-        "fuzzing_positive_case_count": 0,
-        "fuzzing_negative_case_count": 0,
-        **changes,
+        "include_examples": False,
+        "include_coverage": False,
+        "fuzzing_positive_cases_per_operation": 0,
+        "fuzzing_negative_cases_per_operation": 0,
     }
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="generation source must be enabled"):
         SchemathesisGenerationConfig(**values)
 
 
-def test_rejects_combined_phase_budget_over_one_hundred() -> None:
-    with pytest.raises(ValidationError, match="cannot exceed 100"):
+@pytest.mark.parametrize("count", [-1, 101])
+def test_rejects_invalid_per_operation_fuzzing_count(count: int) -> None:
+    with pytest.raises(ValidationError):
         SchemathesisGenerationConfig(
-            example_case_limit=21,
-            coverage_positive_case_limit=20,
-            coverage_negative_case_limit=20,
-            fuzzing_positive_case_count=20,
-            fuzzing_negative_case_count=20,
+            fuzzing_positive_cases_per_operation=count,
         )
