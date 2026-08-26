@@ -12,6 +12,7 @@ dependencies = [
     "openapi-spec-validator>=0.8,<0.9",
     "pydantic>=2.13.4",
     "pyyaml>=6.0.3",
+    "schemathesis>=4.25.2,<5",
     "typer>=0.27.1",
 ]
 

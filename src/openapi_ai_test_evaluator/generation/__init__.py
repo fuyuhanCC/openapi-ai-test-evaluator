@@ -34,6 +34,20 @@ from openapi_ai_test_evaluator.generation.schemathesis_adapter import (
     SchemathesisCaseAdaptation,
     adapt_schemathesis_case,
 )
+from openapi_ai_test_evaluator.generation.schemathesis_batch import (
+    SCHEMATHESIS_ADAPTER_VERSION,
+    RejectedSchemathesisCase,
+    SchemathesisBatchAdaptation,
+    SchemathesisBatchCollector,
+)
+from openapi_ai_test_evaluator.generation.schemathesis_capture import (
+    SchemathesisCaseCapture,
+    capture_schemathesis_case,
+)
+from openapi_ai_test_evaluator.generation.schemathesis_generator import (
+    SchemathesisGenerationConfig,
+    generate_schemathesis_batch,
+)
 
 __all__ = [
     "DEFAULT_DEEPSEEK_BASE_URL",
@@ -52,12 +66,20 @@ __all__ = [
     "ProviderRequest",
     "ProviderResponse",
     "PROMPT_VERSION",
+    "RejectedSchemathesisCase",
+    "SCHEMATHESIS_ADAPTER_VERSION",
     "SUPPORTED_PROMPT_VERSIONS",
     "SchemathesisCaseAdaptation",
+    "SchemathesisCaseCapture",
+    "SchemathesisGenerationConfig",
+    "SchemathesisBatchAdaptation",
+    "SchemathesisBatchCollector",
     "PromptBuildError",
     "adapt_schemathesis_case",
     "build_openapi_context",
     "build_provider_request",
+    "capture_schemathesis_case",
     "generate_cases_from_openapi",
+    "generate_schemathesis_batch",
     "generate_test_case_batch",
 ]

@@ -253,6 +253,117 @@ def test_cases_generate_refuses_to_overwrite_before_provider_call(
     assert provider_created is False
 
 
+def test_cases_generate_baseline_writes_cases_and_adaptation_record(tmp_path: Path) -> None:
+    spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
+    cases_output = tmp_path / "cases" / "schemathesis.json"
+    record_output = tmp_path / "adaptations" / "schemathesis.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "cases",
+            "generate-baseline",
+            "--spec",
+            str(spec_path),
+            "--cases-output",
+            str(cases_output),
+            "--record-output",
+            str(record_output),
+            "--examples",
+            "0",
+            "--coverage-positive",
+            "0",
+            "--coverage-negative",
+            "0",
+            "--fuzzing-positive",
+            "1",
+            "--fuzzing-negative",
+            "0",
+            "--seed",
+            "7",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    summary = json.loads(result.stdout)
+    assert summary["status"] == "succeeded"
+    assert summary["received_cases"] == 1
+    assert summary["adapted_cases"] == 1
+    assert summary["rejected_cases"] == 0
+    assert summary["cases_output"] == str(cases_output)
+    saved_cases = json.loads(cases_output.read_text(encoding="utf-8"))
+    saved_record = json.loads(record_output.read_text(encoding="utf-8"))
+    assert saved_cases["cases"][0]["id"] == "schemathesis-0001"
+    assert saved_record["kind"] == "AdaptationRecord"
+    assert saved_record["seed"] == 7
+
+
+def test_cases_generate_baseline_rejects_empty_budget_before_writing(tmp_path: Path) -> None:
+    spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
+    cases_output = tmp_path / "cases.json"
+    record_output = tmp_path / "record.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "cases",
+            "generate-baseline",
+            "--spec",
+            str(spec_path),
+            "--cases-output",
+            str(cases_output),
+            "--record-output",
+            str(record_output),
+            "--examples",
+            "0",
+            "--coverage-positive",
+            "0",
+            "--coverage-negative",
+            "0",
+            "--fuzzing-positive",
+            "0",
+            "--fuzzing-negative",
+            "0",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["stage"] == "config"
+    assert not cases_output.exists()
+    assert not record_output.exists()
+
+
+def test_cases_generate_baseline_refuses_to_overwrite_existing_artifacts(
+    tmp_path: Path,
+) -> None:
+    spec_path = ROOT / "examples" / "demo-items" / "openapi.yaml"
+    cases_output = tmp_path / "cases.json"
+    record_output = tmp_path / "record.json"
+    record_output.write_text("keep-me", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "cases",
+            "generate-baseline",
+            "--spec",
+            str(spec_path),
+            "--cases-output",
+            str(cases_output),
+            "--record-output",
+            str(record_output),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["stage"] == "artifacts"
+    assert record_output.read_text(encoding="utf-8") == "keep-me"
+    assert not cases_output.exists()
+
+
 def run_result(outcome: ExecutionOutcome = ExecutionOutcome.PASSED) -> RunResult:
     now = datetime(2026, 8, 23, 10, tzinfo=UTC)
     return RunResult(

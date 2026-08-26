@@ -6,10 +6,10 @@
 | --- | --- |
 | Status | V1 implementation in progress |
 | Version | 1.1 |
-| Last updated | 2026-08-25 |
+| Last updated | 2026-08-26 |
 | Primary benchmark | Spring PetClinic REST |
 | LLM providers | Extensible provider interface; DeepSeek implemented first |
-| Conventional baseline | Schemathesis adapter planned for V1 |
+| Conventional baseline | Schemathesis stateless adapter implemented |
 
 ## 1. Context and Motivation
 
@@ -594,6 +594,14 @@ OpenAPI -> normalized context -> ProviderRequest -> provider response
         -> TestCaseBatch validation -> GenerationRecord + artifacts
 ```
 
+The conventional baseline follows a separate generation boundary but converges
+on the same executable contract:
+
+```text
+OpenAPI -> Schemathesis examples/coverage/fuzzing -> adapter
+        -> TestCaseBatch + AdaptationRecord
+```
+
 ### 9.1 Conventional baseline
 
 V1 uses Schemathesis as its first mature schema-driven baseline. The project
@@ -612,7 +620,7 @@ limit are frozen in the experiment manifest. Concrete negative requests must
 declare the contract violations detected by the common semantic validator
 before they become executable `intentionally_invalid` cases.
 
-Schemathesis-native stateful or fuzzing modes that cannot yet be normalized
+Schemathesis-native stateful workflows or future modes that cannot be normalized
 without changing their semantics may be run as a labeled secondary external
 baseline. Their traffic and outcomes are mapped into the common evaluation
 schema, but they are not mixed into the primary four arms until the mapping is
@@ -1070,7 +1078,8 @@ The installed CLI name is `oate`. The planned V1 surface is:
 oate spec validate --spec <openapi-file>
 oate cases generate --spec <openapi-file> --provider <provider> \
   --cases-output <cases> --record-output <record> --raw-output <raw>
-oate cases import --spec <openapi-file> --tool schemathesis --out <cases>
+oate cases generate-baseline --spec <openapi-file> --tool schemathesis \
+  --cases-output <cases> --record-output <record>
 oate cases validate --spec <openapi-file> --cases <cases>
 oate cases run --spec <openapi-file> --cases <cases> --base-url <url>
 oate plan validate --spec <openapi-file> --plan <plan>
@@ -1080,9 +1089,9 @@ oate report --run <artifact-directory>
 ```
 
 Command output is concise for humans and supports JSON mode for CI.
-`oate cases generate`, `oate cases validate`, `oate cases run`, `oate plan
-validate`, `oate plan schema`, and `oate run` are currently implemented. The
-Schemathesis import, benchmark, and report commands remain planned. Run commands
+`oate cases generate`, `oate cases generate-baseline`, `oate cases validate`,
+`oate cases run`, `oate plan validate`, `oate plan schema`, and `oate run` are
+currently implemented. The benchmark and report commands remain planned. Run commands
 repeat semantic validation before opening the transport, execute cases
 serially with isolated variable scopes, and return nonzero for failed or
 errored runs while preserving the `RunResult` JSON. The supplied base URL is the

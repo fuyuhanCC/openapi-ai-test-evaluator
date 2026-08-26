@@ -102,6 +102,23 @@ the same per-case step limit and demonstrates the object syntax required for
 runtime variable references. Existing artifact files are not replaced unless
 `--overwrite` is explicitly provided.
 
+Generate the conventional Schemathesis baseline without sending requests to the
+target service:
+
+```bash
+uv run oate cases generate-baseline \
+  --spec examples/demo-items/openapi.yaml \
+  --tool schemathesis \
+  --cases-output artifacts/cases/schemathesis-demo-001.json \
+  --record-output artifacts/adaptations/schemathesis-demo-001.json \
+  --seed 7
+```
+
+This command draws bounded examples, coverage cases, and positive/negative
+fuzzing cases, adapts eligible requests into the common `TestCaseBatch`, and
+records every rejected case category in an `AdaptationRecord`. HTTP requests are
+sent only later through `oate cases run`.
+
 Validate and run a generated batch with the same runner used by every adapted
 generator:
 

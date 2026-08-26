@@ -11,6 +11,7 @@ from pydantic import Field, field_validator, model_validator
 from openapi_ai_test_evaluator.domain.contracts import ContractModel, Identifier
 
 NonNegativeInt = Annotated[int, Field(ge=0)]
+PositiveInt = Annotated[int, Field(ge=1)]
 NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 
 
@@ -87,4 +88,39 @@ class GenerationRecord(ContractModel):
             raise ValueError("successful generation records cannot contain an error")
         if self.status is not GenerationStatus.SUCCEEDED and self.error is None:
             raise ValueError("unsuccessful generation records require an error")
+        return self
+
+
+class AdaptationSkipReason(ContractModel):
+    """Stable primary reason why one or more baseline cases were rejected."""
+
+    code: str = Field(min_length=1)
+    detail_code: str | None = Field(default=None, min_length=1)
+    count: PositiveInt
+
+
+class AdaptationRecord(ContractModel):
+    """Reproducible summary of one conventional-tool adaptation attempt."""
+
+    schema_version: Literal["1.0"]
+    kind: Literal["AdaptationRecord"]
+    tool: Literal["schemathesis"]
+    tool_version: str = Field(min_length=1)
+    adapter_version: str = Field(min_length=1)
+    seed: int | None = None
+    received_case_count: NonNegativeInt
+    adapted_case_count: NonNegativeInt
+    rejected_case_count: NonNegativeInt
+    skip_reasons: list[AdaptationSkipReason] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_counts(self) -> Self:
+        if self.received_case_count != self.adapted_case_count + self.rejected_case_count:
+            raise ValueError("received cases must equal adapted plus rejected cases")
+
+        reason_keys = [(reason.code, reason.detail_code) for reason in self.skip_reasons]
+        if len(reason_keys) != len(set(reason_keys)):
+            raise ValueError("adaptation skip reasons must be unique")
+        if sum(reason.count for reason in self.skip_reasons) != self.rejected_case_count:
+            raise ValueError("skip reason counts must equal rejected case count")
         return self

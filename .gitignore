@@ -7,6 +7,9 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Runtime-generated model outputs, cases, and execution results.
+artifacts/
+
 .env
 .env.*
 !.env.example

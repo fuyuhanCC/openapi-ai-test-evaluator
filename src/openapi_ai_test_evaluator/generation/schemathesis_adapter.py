@@ -34,6 +34,10 @@ class CapturedPhase(StrEnum):
 
 
 class AdaptationRejectionCode(StrEnum):
+    CAPTURE_OPERATION_UNRESOLVED = "capture_operation_unresolved"
+    CAPTURE_MODE_UNSUPPORTED = "capture_mode_unsupported"
+    CAPTURE_PHASE_UNSUPPORTED = "capture_phase_unsupported"
+    CAPTURE_COMPONENT_UNSUPPORTED = "capture_component_unsupported"
     UNKNOWN_OPERATION = "unknown_operation"
     METHOD_MISMATCH = "method_mismatch"
     PATH_MISMATCH = "path_mismatch"

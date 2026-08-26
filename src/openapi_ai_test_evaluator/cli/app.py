@@ -8,8 +8,11 @@ from pathlib import Path
 from typing import Annotated, NoReturn
 from uuid import uuid4
 
+import schemathesis
 import typer
+from hypothesis.errors import HypothesisException
 from pydantic import ValidationError
+from schemathesis.errors import SchemathesisError
 
 from openapi_ai_test_evaluator.domain import (
     GenerationConfig,
@@ -25,7 +28,9 @@ from openapi_ai_test_evaluator.generation import (
     DeepSeekProvider,
     DeepSeekProviderConfigError,
     PromptBuildError,
+    SchemathesisGenerationConfig,
     generate_cases_from_openapi,
+    generate_schemathesis_batch,
 )
 from openapi_ai_test_evaluator.spec import SpecLoadError, load_openapi
 from openapi_ai_test_evaluator.validation import (
@@ -54,6 +59,10 @@ app.add_typer(cases_app, name="cases")
 
 class GenerationProviderChoice(StrEnum):
     DEEPSEEK = "deepseek"
+
+
+class BaselineToolChoice(StrEnum):
+    SCHEMATHESIS = "schemathesis"
 
 
 @cases_app.command("generate")
@@ -322,6 +331,157 @@ def _report_generation_input_error(
     else:
         typer.echo(f"Cannot generate TestCaseBatch ({stage}): {error}", err=True)
     raise typer.Exit(code=1)
+
+
+@cases_app.command("generate-baseline")
+def generate_baseline_cases(
+    spec: Annotated[
+        Path,
+        typer.Option("--spec", exists=True, file_okay=True, dir_okay=False, readable=True),
+    ],
+    cases_output: Annotated[
+        Path,
+        typer.Option("--cases-output", file_okay=True, dir_okay=False),
+    ],
+    record_output: Annotated[
+        Path,
+        typer.Option("--record-output", file_okay=True, dir_okay=False),
+    ],
+    tool: Annotated[
+        BaselineToolChoice,
+        typer.Option("--tool", help="Conventional test-case generator."),
+    ] = BaselineToolChoice.SCHEMATHESIS,
+    example_case_limit: Annotated[
+        int,
+        typer.Option("--examples", help="Maximum OpenAPI example cases."),
+    ] = 5,
+    coverage_positive_case_limit: Annotated[
+        int,
+        typer.Option("--coverage-positive", help="Maximum positive coverage cases."),
+    ] = 5,
+    coverage_negative_case_limit: Annotated[
+        int,
+        typer.Option("--coverage-negative", help="Maximum negative coverage cases."),
+    ] = 5,
+    fuzzing_positive_case_count: Annotated[
+        int,
+        typer.Option("--fuzzing-positive", help="Positive fuzzing case count."),
+    ] = 5,
+    fuzzing_negative_case_count: Annotated[
+        int,
+        typer.Option("--fuzzing-negative", help="Negative fuzzing case count."),
+    ] = 5,
+    seed: Annotated[
+        int,
+        typer.Option("--seed", help="Reproducible generator seed."),
+    ] = 0,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Allow replacing existing artifact files."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit a machine-readable adaptation summary."),
+    ] = False,
+) -> None:
+    """Generate and adapt conventional baseline cases without executing HTTP requests."""
+    _prepare_baseline_outputs(cases_output, record_output, overwrite, json_output)
+
+    try:
+        openapi_spec = load_openapi(spec)
+    except SpecLoadError as error:
+        _report_generation_input_error("openapi", error, json_output)
+
+    try:
+        config = SchemathesisGenerationConfig(
+            example_case_limit=example_case_limit,
+            coverage_positive_case_limit=coverage_positive_case_limit,
+            coverage_negative_case_limit=coverage_negative_case_limit,
+            fuzzing_positive_case_count=fuzzing_positive_case_count,
+            fuzzing_negative_case_count=fuzzing_negative_case_count,
+            seed=seed,
+        )
+    except ValidationError as error:
+        _report_generation_input_error("config", error, json_output)
+
+    if tool is not BaselineToolChoice.SCHEMATHESIS:
+        _report_generation_input_error(
+            "tool-config",
+            ValueError(f"unsupported baseline tool: {tool.value}"),
+            json_output,
+        )
+
+    try:
+        schema = schemathesis.openapi.from_path(spec)
+        adaptation = generate_schemathesis_batch(schema, openapi_spec, config)
+    except (OSError, SchemathesisError, HypothesisException) as error:
+        _report_generation_input_error("schemathesis", error, json_output)
+
+    _write_generation_artifact(
+        record_output,
+        adaptation.record.model_dump_json(indent=2),
+        json_output,
+    )
+    summary: dict[str, object] = {
+        "status": "succeeded" if adaptation.batch is not None else "no_adapted_cases",
+        "tool": adaptation.record.tool,
+        "received_cases": adaptation.record.received_case_count,
+        "adapted_cases": adaptation.record.adapted_case_count,
+        "rejected_cases": adaptation.record.rejected_case_count,
+        "record_output": str(record_output),
+        "skip_reasons": [reason.model_dump() for reason in adaptation.record.skip_reasons],
+    }
+    if adaptation.batch is None:
+        _emit_baseline_summary(summary, json_output)
+        raise typer.Exit(code=1)
+
+    _write_generation_artifact(
+        cases_output,
+        adaptation.batch.model_dump_json(indent=2),
+        json_output,
+    )
+    summary["cases_output"] = str(cases_output)
+    _emit_baseline_summary(summary, json_output)
+
+
+def _prepare_baseline_outputs(
+    cases_output: Path,
+    record_output: Path,
+    overwrite: bool,
+    json_output: bool,
+) -> None:
+    if cases_output.resolve() == record_output.resolve():
+        _report_generation_input_error(
+            "artifacts",
+            ValueError("cases-output and record-output must be different files"),
+            json_output,
+        )
+    existing = [path for path in (cases_output, record_output) if path.exists()]
+    if existing and not overwrite:
+        paths = ", ".join(str(path) for path in existing)
+        _report_generation_input_error(
+            "artifacts",
+            ValueError(f"refusing to overwrite existing artifacts: {paths}"),
+            json_output,
+        )
+    try:
+        cases_output.parent.mkdir(parents=True, exist_ok=True)
+        record_output.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        _report_generation_input_error("artifacts", error, json_output)
+
+
+def _emit_baseline_summary(summary: dict[str, object], json_output: bool) -> None:
+    if json_output:
+        typer.echo(json.dumps(summary))
+        return
+    typer.echo(
+        f"Schemathesis adaptation: {summary['status']} "
+        f"({summary['received_cases']} received, {summary['adapted_cases']} adapted, "
+        f"{summary['rejected_cases']} rejected); wrote {summary['record_output']}"
+        + (f", {summary['cases_output']}" if "cases_output" in summary else ""),
+        err=summary["status"] != "succeeded",
+    )
 
 
 @cases_app.command("validate")
