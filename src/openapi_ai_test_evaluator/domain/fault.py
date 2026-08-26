@@ -13,6 +13,7 @@ from openapi_ai_test_evaluator.domain.execution import HttpMethod
 
 HttpStatus = Annotated[int, Field(ge=100, le=599)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
+FAULT_ID_RESPONSE_HEADER = "x-oate-fault-id"
 
 
 class FaultCategory(StrEnum):
@@ -138,6 +139,7 @@ __all__ = [
     "DuplicateJsonArrayItemMutation",
     "FaultCategory",
     "FaultDefinition",
+    "FAULT_ID_RESPONSE_HEADER",
     "FaultMatcher",
     "FaultMutation",
     "FaultProxyMode",

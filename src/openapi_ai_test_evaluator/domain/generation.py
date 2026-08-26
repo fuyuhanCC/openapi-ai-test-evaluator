@@ -162,6 +162,7 @@ class AdaptationRecord(ContractModel):
     tool_version: str = Field(min_length=1)
     adapter_version: str = Field(min_length=1)
     seed: int | None = None
+    duration_ms: NonNegativeInt | None = None
     received_case_count: NonNegativeInt
     adapted_case_count: NonNegativeInt
     rejected_case_count: NonNegativeInt

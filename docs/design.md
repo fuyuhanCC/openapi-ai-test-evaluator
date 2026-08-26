@@ -6,7 +6,7 @@
 | --- | --- |
 | Status | V1 implementation in progress |
 | Version | 1.1 |
-| Last updated | 2026-08-26 |
+| Last updated | 2026-08-27 |
 | Primary benchmark | Spring PetClinic REST |
 | LLM providers | Extensible provider interface; DeepSeek implemented first |
 | Conventional baseline | Schemathesis stateless adapter implemented |
@@ -187,7 +187,7 @@ flowchart TD
     metamorphic --> result
     lifecycle --> result
     result --> evaluator["Experiment evaluator"]
-    evaluator --> reports["JSON, JUnit XML, and HTML reports"]
+    evaluator --> reports["ComparisonResult JSON and Markdown report"]
 ```
 
 The benchmark traffic path is:
@@ -202,7 +202,7 @@ With no fault enabled, the proxy operates in transparent pass-through mode.
 
 ### 7.1 Current implementation checkpoint
 
-Implemented as of 2026-08-26:
+Implemented as of 2026-08-27:
 
 - OpenAPI 3.0/3.1 common-scope loading, normalization, and static validation.
 - Strict `TestCaseBatch`, `GenerationConfig`, `GenerationRecord`, and
@@ -215,14 +215,26 @@ Implemented as of 2026-08-26:
 - Deterministic HTTP execution with variables, assertions, extractions,
   setup/main/cleanup, and all six declared relation types.
 - A deterministic FastAPI fixture with real local-HTTP integration coverage.
+- Generic response-fault contracts and mutation operators, plus a standalone
+  FastAPI proxy with pass-through mode, single-fault activation, bounded
+  upstream responses, and observable trigger counts.
+- A four-fault Demo Items infrastructure catalog with reference tests for
+  triggerability and observability.
+- Clean-versus-fault execution orchestration for one frozen `TestCaseBatch`,
+  including deterministic reset order, trigger observation, and final proxy
+  cleanup, covered by a real-HTTP end-to-end test.
+- Strict single-suite evaluation with admission, execution, coverage,
+  efficiency, and five-state fault outcomes correlated to response evidence.
+- Paired multi-suite/repetition aggregation with raw and normalized metrics,
+  missing-value accounting, per-fault stability, and deterministic JSON and
+  Markdown report output through `oate report compare`.
 - Legacy hand-authored `TestPlan` validation and execution compatibility.
 
 Still required for the V1 experiment:
 
 - PetClinic benchmark packaging and deterministic reset workflow.
-- Fault proxy, fault catalog, and reference tests.
-- Experiment orchestration, aggregate evaluation, reports, Docker Compose, and
-  CI workflows.
+- PetClinic fault catalog and reference trigger/observability tests.
+- Top-level benchmark orchestration, Docker Compose, and CI workflows.
 
 ## 8. Core Data Contracts
 
@@ -586,8 +598,41 @@ precedence across test cases.
 
 ### 8.6 `EvaluationResult`
 
-`EvaluationResult` contains aggregate metrics, per-fault outcomes, run metadata,
-and links to the underlying artifacts.
+One `EvaluationResult` evaluates one generator suite in one repetition. It
+contains generator and source-record metadata, case-admission metrics, clean
+execution quality, operation coverage, request and duration counts, aggregate
+fault metrics, per-fault outcomes, and the IDs of its underlying `RunResult`
+artifacts.
+
+Per-fault outcomes are explicit rather than collapsed prematurely:
+
+- `detected`: a clean-passing case received the mutated response and failed a
+  deterministic oracle.
+- `not_detected`: an eligible case received the mutation but still passed.
+- `not_triggered`: the proxy did not apply the configured fault.
+- `no_eligible_case`: the mutation reached only cases that did not pass cleanly.
+- `inconclusive`: an eligible mutated case ended in an execution error rather
+  than a deterministic pass/fail verdict.
+
+Fault attribution requires the proxy's sanitized fault ID on the response
+stored in the same case; a run-level trigger count alone is insufficient.
+`extra="forbid"`, stable identifiers, arrays, and `schema_version` preserve
+strict validation while allowing additional versioned metrics later.
+
+### 8.7 `ComparisonResult`
+
+One `ComparisonResult` aggregates two or more generator suites over the same
+paired repetition numbers, OpenAPI specification, and fault set. It stores the
+source evaluation IDs and never hides unequal native suite sizes. For each
+suite, it records every per-repetition value plus population mean, standard
+deviation, minimum, maximum, and the number of missing observations.
+
+The summary includes admission and executable rates, operation coverage, clean
+false positives, fault detection, detections per 100 fault requests, raw
+request counts, durations, token usage, and estimated cost. Per-fault stability
+preserves all five evaluation outcome counts instead of reducing unstable or
+unevaluable runs to a false zero. Comparison reports describe the measurements
+but do not manufacture a single weighted winner score.
 
 ## 9. Generation
 
@@ -1000,6 +1045,7 @@ A fault is counted as detected only when all conditions hold:
 ```text
 the test passes on the clean SUT
 and the proxy confirms that the fault triggered
+and that case's response evidence contains the configured fault ID
 and a deterministic oracle fails on the faulty SUT
 ```
 
@@ -1056,8 +1102,8 @@ artifacts/
     ├── evaluation/
     │   └── summary.json
     └── reports/
-        ├── junit.xml
-        └── report.html
+        ├── comparison.json
+        └── comparison.md
 ```
 
 The manifest records:
@@ -1093,14 +1139,15 @@ oate cases run --spec <openapi-file> --cases <cases> --base-url <url>
 oate plan validate --spec <openapi-file> --plan <plan>
 oate run --spec <openapi-file> --plan <plan> --base-url <url>
 oate benchmark --config <benchmark-config>
-oate report --run <artifact-directory>
+oate report compare --evaluation <evaluation-json> [...] \
+  --json-output <comparison-json> --markdown-output <comparison-markdown>
 ```
 
 Command output is concise for humans and supports JSON mode for CI.
 `oate cases generate`, `oate cases generate-baseline`, `oate cases validate`,
-`oate cases run`, `oate plan validate`, `oate plan schema`, and `oate run` are
-currently implemented. The benchmark and report commands remain planned. Run commands
-repeat semantic validation before opening the transport, execute cases
+`oate cases run`, `oate plan validate`, `oate plan schema`, `oate run`, and
+`oate report compare` are currently implemented. The benchmark command remains
+planned. Run commands repeat semantic validation before opening the transport, execute cases
 serially with isolated variable scopes, and return nonzero for failed or
 errored runs while preserving the `RunResult` JSON. The supplied base URL is the
 sole target origin and redirects are disabled. Mutating cases require the
@@ -1140,8 +1187,8 @@ artifacts/
 ```
 
 Benchmark-specific code and data must depend on the framework, never the other
-way around. `evaluation/`, `reporting/`, `fault_proxy/`, and `benchmarks/` are
-target V1 directories and are not all present at the current checkpoint.
+way around. The framework-level evaluation, reporting, and fault-proxy
+boundaries are present; PetClinic-specific benchmark content remains pending.
 
 ## 19. Technology Choices
 
@@ -1232,7 +1279,8 @@ V1 is complete when:
 6. All 12 PetClinic faults can be enabled independently and have reference
    tests.
 7. Three complete native-suite repetitions have been recorded.
-8. JSON, JUnit XML, and HTML reports are generated from the same raw results.
+8. Comparison JSON and Markdown reports are generated from the same strict
+   `EvaluationResult` artifacts.
 9. `uv run pytest` passes in a clean checkout.
 10. Docker Compose reproduces the PetClinic benchmark environment.
 11. CI succeeds without any LLM API key.

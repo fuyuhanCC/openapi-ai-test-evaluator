@@ -1,0 +1,12 @@
+schema_version: "1.0"
+fault_id: get-missing-name
+description: Remove the required name field from a successful item lookup.
+category: response_body
+matcher:
+  method: GET
+  path_regex: "^/items/[0-9]+$"
+  response_statuses: [200]
+  response_media_type: application/json
+mutation:
+  type: remove_json_value
+  pointer: /name

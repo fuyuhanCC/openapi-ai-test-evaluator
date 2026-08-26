@@ -33,6 +33,7 @@ def test_generates_all_coverage_and_per_operation_fuzzing_without_http() -> None
     # The pinned Schemathesis version emits 236 finite coverage cases for this
     # six-operation fixture, followed by 3 fuzzing cases per operation.
     assert result.record.received_case_count == 236 + (6 * 3)
+    assert result.record.duration_ms is not None
     assert (
         result.record.adapted_case_count + result.record.rejected_case_count
         == result.record.received_case_count
@@ -40,10 +41,7 @@ def test_generates_all_coverage_and_per_operation_fuzzing_without_http() -> None
     assert result.record.seed == 7
     if result.batch is not None:
         phases = {
-            tag
-            for case in result.batch.cases
-            for tag in case.tags
-            if tag.startswith("phase:")
+            tag for case in result.batch.cases for tag in case.tags if tag.startswith("phase:")
         }
         assert phases == {"phase:coverage", "phase:fuzzing"}
 
@@ -57,17 +55,15 @@ def test_generation_is_reproducible_for_the_same_seed() -> None:
         seed=19,
     )
 
-    first = generate_schemathesis_batch(
-        schemathesis.openapi.from_path(SPEC_PATH), SPEC, config
-    )
-    second = generate_schemathesis_batch(
-        schemathesis.openapi.from_path(SPEC_PATH), SPEC, config
-    )
+    first = generate_schemathesis_batch(schemathesis.openapi.from_path(SPEC_PATH), SPEC, config)
+    second = generate_schemathesis_batch(schemathesis.openapi.from_path(SPEC_PATH), SPEC, config)
 
     first_batch = first.batch.model_dump(mode="json") if first.batch is not None else None
     second_batch = second.batch.model_dump(mode="json") if second.batch is not None else None
     assert second_batch == first_batch
-    assert second.record == first.record
+    assert second.record.model_dump(exclude={"duration_ms"}) == first.record.model_dump(
+        exclude={"duration_ms"}
+    )
 
 
 def test_fuzzing_count_applies_to_every_openapi_operation() -> None:

@@ -32,6 +32,13 @@ from openapi_ai_test_evaluator.generation import (
     generate_cases_from_openapi,
     generate_schemathesis_batch,
 )
+from openapi_ai_test_evaluator.reporting import (
+    ComparisonInputError,
+    EvaluationArtifactError,
+    compare_evaluations,
+    load_evaluation_result,
+    render_comparison_markdown,
+)
 from openapi_ai_test_evaluator.spec import SpecLoadError, load_openapi
 from openapi_ai_test_evaluator.validation import (
     PlanLoadError,
@@ -53,8 +60,13 @@ cases_app = typer.Typer(
     help="Validate and run provider-independent TestCaseBatch documents.",
     no_args_is_help=True,
 )
+report_app = typer.Typer(
+    help="Compare evaluated generator suites and render reports.",
+    no_args_is_help=True,
+)
 app.add_typer(plan_app, name="plan")
 app.add_typer(cases_app, name="cases")
+app.add_typer(report_app, name="report")
 
 
 class GenerationProviderChoice(StrEnum):
@@ -63,6 +75,146 @@ class GenerationProviderChoice(StrEnum):
 
 class BaselineToolChoice(StrEnum):
     SCHEMATHESIS = "schemathesis"
+
+
+@report_app.command("compare")
+def compare_reports(
+    evaluations: Annotated[
+        list[Path],
+        typer.Option(
+            "--evaluation",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            help="EvaluationResult JSON; repeat once per suite and repetition.",
+        ),
+    ],
+    comparison_id: Annotated[
+        str,
+        typer.Option("--comparison-id", help="Stable identifier for this comparison."),
+    ],
+    json_output_path: Annotated[
+        Path,
+        typer.Option("--json-output", file_okay=True, dir_okay=False),
+    ],
+    markdown_output_path: Annotated[
+        Path,
+        typer.Option("--markdown-output", file_okay=True, dir_okay=False),
+    ],
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Allow replacing existing report files."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit a machine-readable command summary."),
+    ] = False,
+) -> None:
+    """Aggregate paired EvaluationResult artifacts into JSON and Markdown."""
+    try:
+        loaded = [load_evaluation_result(path) for path in evaluations]
+    except EvaluationArtifactError as error:
+        _report_comparison_error("evaluation-artifacts", error, json_output)
+
+    try:
+        comparison = compare_evaluations(loaded, comparison_id=comparison_id)
+    except (ComparisonInputError, ValidationError) as error:
+        _report_comparison_error("comparison", error, json_output)
+
+    _prepare_comparison_outputs(
+        evaluations,
+        json_output_path,
+        markdown_output_path,
+        overwrite,
+        json_output,
+    )
+    _write_comparison_artifact(
+        json_output_path,
+        comparison.model_dump_json(indent=2),
+        json_output,
+    )
+    _write_comparison_artifact(
+        markdown_output_path,
+        render_comparison_markdown(comparison),
+        json_output,
+    )
+    summary = {
+        "status": "succeeded",
+        "comparison_id": comparison.comparison_id,
+        "suites": len(comparison.suites),
+        "repetitions": len(comparison.repetitions),
+        "json_output": str(json_output_path),
+        "markdown_output": str(markdown_output_path),
+    }
+    if json_output:
+        typer.echo(json.dumps(summary))
+    else:
+        typer.echo(
+            f"Comparison {comparison.comparison_id}: "
+            f"{_count_label(len(comparison.suites), 'suite')}, "
+            f"{_count_label(len(comparison.repetitions), 'repetition')}; "
+            f"wrote {json_output_path}, {markdown_output_path}"
+        )
+
+
+def _prepare_comparison_outputs(
+    evaluation_paths: list[Path],
+    json_output_path: Path,
+    markdown_output_path: Path,
+    overwrite: bool,
+    json_output: bool,
+) -> None:
+    outputs = (json_output_path, markdown_output_path)
+    resolved_outputs = {path.resolve() for path in outputs}
+    if len(resolved_outputs) != len(outputs):
+        _report_comparison_error(
+            "artifacts",
+            ValueError("json-output and markdown-output must be different files"),
+            json_output,
+        )
+    if resolved_outputs & {path.resolve() for path in evaluation_paths}:
+        _report_comparison_error(
+            "artifacts",
+            ValueError("report outputs cannot overwrite source evaluation artifacts"),
+            json_output,
+        )
+    existing = [path for path in outputs if path.exists()]
+    if existing and not overwrite:
+        paths = ", ".join(str(path) for path in existing)
+        _report_comparison_error(
+            "artifacts",
+            ValueError(f"refusing to overwrite existing report artifacts: {paths}"),
+            json_output,
+        )
+    try:
+        for path in outputs:
+            path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        _report_comparison_error("artifacts", error, json_output)
+
+
+def _write_comparison_artifact(
+    path: Path,
+    serialized: str,
+    json_output: bool,
+) -> None:
+    try:
+        path.write_text(serialized.rstrip("\n") + "\n", encoding="utf-8")
+    except OSError as error:
+        _report_comparison_error("artifacts", error, json_output)
+
+
+def _report_comparison_error(
+    stage: str,
+    error: Exception,
+    json_output: bool,
+) -> NoReturn:
+    if json_output:
+        typer.echo(json.dumps({"status": "not_started", "stage": stage, "error": str(error)}))
+    else:
+        typer.echo(f"Cannot create comparison report ({stage}): {error}", err=True)
+    raise typer.Exit(code=1)
 
 
 @cases_app.command("generate")

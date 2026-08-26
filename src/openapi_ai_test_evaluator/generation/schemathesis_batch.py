@@ -67,7 +67,7 @@ class SchemathesisBatchCollector:
             return
         self._adapted_cases.append(adaptation.case)
 
-    def finish(self) -> SchemathesisBatchAdaptation:
+    def finish(self, *, duration_ms: int | None = None) -> SchemathesisBatchAdaptation:
         """Build immutable artifacts from all cases received so far."""
         reason_counts = Counter(
             (rejected.rejections[0].code.value, rejected.rejections[0].detail_code)
@@ -86,6 +86,7 @@ class SchemathesisBatchCollector:
             tool_version=schemathesis.__version__,
             adapter_version=SCHEMATHESIS_ADAPTER_VERSION,
             seed=self._seed,
+            duration_ms=duration_ms,
             received_case_count=self._received_count,
             adapted_case_count=len(self._adapted_cases),
             rejected_case_count=len(self._rejected_cases),

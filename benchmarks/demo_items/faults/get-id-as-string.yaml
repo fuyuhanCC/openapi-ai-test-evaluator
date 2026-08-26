@@ -1,0 +1,13 @@
+schema_version: "1.0"
+fault_id: get-id-as-string
+description: Replace the numeric item identifier with a string.
+category: response_body
+matcher:
+  method: GET
+  path_regex: "^/items/[0-9]+$"
+  response_statuses: [200]
+  response_media_type: application/json
+mutation:
+  type: replace_json_value
+  pointer: /id
+  value: invalid-id

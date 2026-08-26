@@ -1,5 +1,6 @@
 """Domain contracts exposed by the framework."""
 
+from openapi_ai_test_evaluator.domain.evaluation import EvaluationResult
 from openapi_ai_test_evaluator.domain.execution import RunResult, TestCaseResult
 from openapi_ai_test_evaluator.domain.fault import FaultDefinition, FaultProxyState
 from openapi_ai_test_evaluator.domain.generation import (
@@ -12,6 +13,7 @@ from openapi_ai_test_evaluator.domain.generation import (
     GenerationRecord,
 )
 from openapi_ai_test_evaluator.domain.openapi import OpenAPISpec, OperationModel
+from openapi_ai_test_evaluator.domain.reporting import ComparisonResult
 from openapi_ai_test_evaluator.domain.test_case import (
     ExecutionConfig,
     TestCase,
@@ -21,11 +23,13 @@ from openapi_ai_test_evaluator.domain.test_plan import TestPlan
 
 __all__ = [
     "ExecutionConfig",
+    "EvaluationResult",
     "AdaptationRecord",
     "AdaptationSkipReason",
     "CaseAdmissionRejection",
     "CaseAdmissionStage",
     "CaseAdmissionSummary",
+    "ComparisonResult",
     "GenerationConfig",
     "GenerationRecord",
     "FaultDefinition",

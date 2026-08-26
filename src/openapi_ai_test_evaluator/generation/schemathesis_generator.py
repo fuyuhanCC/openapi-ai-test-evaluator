@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from time import perf_counter_ns
 from typing import Self
 
 import schemathesis
@@ -45,6 +46,7 @@ def generate_schemathesis_batch(
     config: SchemathesisGenerationConfig,
 ) -> SchemathesisBatchAdaptation:
     """Generate complete finite phases and bounded fuzzing without HTTP I/O."""
+    started_at = perf_counter_ns()
     collector = SchemathesisBatchCollector(spec, seed=config.seed)
     operations = [result.ok() for result in schema.get_all_operations()]
 
@@ -67,7 +69,7 @@ def generate_schemathesis_batch(
         cases_per_operation=config.fuzzing_negative_cases_per_operation,
         random_seed=config.seed + len(operations),
     )
-    return collector.finish()
+    return collector.finish(duration_ms=max(0, (perf_counter_ns() - started_at) // 1_000_000))
 
 
 def _collect_all_examples(

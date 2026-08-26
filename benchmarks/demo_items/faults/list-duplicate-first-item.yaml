@@ -1,0 +1,13 @@
+schema_version: "1.0"
+fault_id: list-duplicate-first-item
+description: Duplicate the first item without changing the reported total.
+category: response_body
+matcher:
+  method: GET
+  path_regex: "^/items$"
+  response_statuses: [200]
+  response_media_type: application/json
+mutation:
+  type: duplicate_json_array_item
+  pointer: /items
+  index: 0

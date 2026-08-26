@@ -9,8 +9,10 @@ oracles.
 > Schemathesis both produce the same runner-ready contract with separate raw,
 > generation, and adaptation artifacts. The deterministic HTTP runner supports
 > assertions, extraction, setup/main/cleanup sequencing, and
-> metamorphic/lifecycle relations. Fault injection, experiment orchestration,
-> and aggregate reports remain to be implemented.
+> metamorphic/lifecycle relations. Response fault injection, clean-versus-fault
+> orchestration, single-suite evaluation, and multi-repetition comparison
+> reports are implemented for the Demo Items fixture. PetClinic packaging and
+> the top-level benchmark command remain to be implemented.
 
 ## What works today
 
@@ -52,6 +54,22 @@ oracles.
   cleanup mutates or removes observed resources.
 - Deterministic TestCaseResult/RunResult 2.0 aggregation with explicit skipped-step
   artifacts, best-effort cleanup handling, timestamps, and fault metadata.
+- A deterministic FastAPI response-fault proxy with pass-through mode,
+  single-fault activation, bounded upstream responses, trigger counts, and
+  status/JSON mutation operators.
+- A strict four-fault Demo Items catalog with reference tests proving that each
+  fault is triggerable and produces an observable response difference.
+- Clean-versus-fault suite orchestration that resets the SUT, executes the same
+  frozen batch in every state, records proxy trigger evidence, and restores
+  pass-through mode after the run.
+- Strict per-suite `EvaluationResult` metrics for admission, executable cases,
+  clean false positives, operation coverage, request counts, and fault
+  detection with same-case proxy evidence.
+- Strict multi-suite `ComparisonResult` aggregation across paired repetitions,
+  including raw suite size, normalized efficiency, mean/standard deviation,
+  missing-value accounting, and per-fault outcome stability.
+- `oate report compare` output in machine-readable JSON and human-readable
+  Markdown, preserving every source evaluation ID for traceability.
 - `oate cases validate` and `oate cases run` commands with structural and
   pre-execution semantic validation, explicit target
   URL validation, mutation opt-in, JSON output, and CI-friendly exit codes.
@@ -122,6 +140,22 @@ of positive/negative fuzzing cases for every OpenAPI operation. It adapts
 eligible requests into the common `TestCaseBatch` and records every rejected
 case category in an `AdaptationRecord`. HTTP requests are sent only later
 through `oate cases run`.
+
+Once clean-versus-fault executions have been reduced to `EvaluationResult`
+artifacts, compare paired DeepSeek and Schemathesis repetitions:
+
+```bash
+uv run oate report compare \
+  --evaluation artifacts/evaluations/deepseek-r1.json \
+  --evaluation artifacts/evaluations/schemathesis-r1.json \
+  --comparison-id deepseek-vs-schemathesis \
+  --json-output artifacts/reports/comparison.json \
+  --markdown-output artifacts/reports/comparison.md
+```
+
+Repeat `--evaluation` for every suite and repetition. Each suite must contain
+the same repetition numbers and fault IDs. The report keeps unequal native
+suite sizes visible and presents both raw request counts and normalized metrics.
 
 Validate and run a generated batch with the same runner used by every adapted
 generator:
