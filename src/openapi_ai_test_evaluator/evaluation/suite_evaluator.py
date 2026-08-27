@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Iterable
 
+from openapi_ai_test_evaluator.domain.composition import SuiteCompositionRecord
 from openapi_ai_test_evaluator.domain.evaluation import (
     CaseAdmissionMetrics,
     EvaluationResult,
@@ -13,6 +14,7 @@ from openapi_ai_test_evaluator.domain.evaluation import (
     FaultSummaryMetrics,
     GeneratorKind,
     GeneratorMetadata,
+    SuiteCompositionMetadata,
     SuiteExecutionMetrics,
 )
 from openapi_ai_test_evaluator.domain.execution import (
@@ -41,10 +43,20 @@ def evaluate_suite_execution(
     source_record: GenerationRecord | AdaptationRecord,
     *,
     evaluation_id: str,
+    composition_record: SuiteCompositionRecord | None = None,
 ) -> EvaluationResult:
     """Evaluate one generator suite without modifying or hiding its raw runs."""
     generator, admission = _source_metrics(source_record)
-    _validate_execution(execution, spec, admission.admitted_case_count)
+    expected_execution_count = admission.admitted_case_count
+    composition = None
+    if composition_record is not None:
+        if composition_record.base_batch.case_count != admission.admitted_case_count:
+            raise EvaluationInputError(
+                "composition base case count does not match source record admission"
+            )
+        expected_execution_count = composition_record.composed_batch.case_count
+        composition = _composition_metadata(composition_record)
+    _validate_execution(execution, spec, expected_execution_count)
 
     clean_passed_ids = {
         case.case_id for case in execution.clean.cases if case.outcome is ExecutionOutcome.PASSED
@@ -70,14 +82,14 @@ def evaluate_suite_execution(
     deterministic_count = (
         clean_outcomes[ExecutionOutcome.PASSED] + clean_outcomes[ExecutionOutcome.FAILED]
     )
-    admitted_count = admission.admitted_case_count
+    executed_count = len(execution.clean.cases)
     suite_metrics = SuiteExecutionMetrics(
-        admitted_case_count=admitted_count,
+        admitted_case_count=executed_count,
         clean_passed_case_count=clean_outcomes[ExecutionOutcome.PASSED],
         clean_failed_case_count=clean_outcomes[ExecutionOutcome.FAILED],
         clean_error_case_count=clean_outcomes[ExecutionOutcome.ERROR],
         clean_skipped_case_count=clean_outcomes[ExecutionOutcome.SKIPPED],
-        executable_case_rate=deterministic_count / admitted_count,
+        executable_case_rate=deterministic_count / executed_count,
         clean_false_positive_rate=(
             clean_outcomes[ExecutionOutcome.FAILED] / deterministic_count
             if deterministic_count
@@ -108,6 +120,7 @@ def evaluate_suite_execution(
         spec_id=spec.spec_id,
         generator=generator,
         admission=admission,
+        composition=composition,
         execution=suite_metrics,
         fault_summary=fault_summary,
         clean_run_id=execution.clean.run_id,
@@ -125,6 +138,34 @@ def validate_source_record_case_count(
         raise EvaluationInputError(
             "source record admitted case count does not match the frozen batch"
         )
+
+
+def validate_composed_suite_case_counts(
+    source_record: GenerationRecord | AdaptationRecord,
+    composition_record: SuiteCompositionRecord,
+    case_count: int,
+) -> None:
+    """Check native admission and composed execution counts before any request."""
+    _, admission = _source_metrics(source_record)
+    if admission.admitted_case_count != composition_record.base_batch.case_count:
+        raise EvaluationInputError(
+            "source record admitted case count does not match the composition base batch"
+        )
+    if case_count != composition_record.composed_batch.case_count:
+        raise EvaluationInputError(
+            "frozen batch case count does not match the composition record"
+        )
+
+
+def _composition_metadata(record: SuiteCompositionRecord) -> SuiteCompositionMetadata:
+    return SuiteCompositionMetadata(
+        composition_id=record.composition_id,
+        enhancement_case_count=sum(
+            enhancement.batch.case_count for enhancement in record.enhancements
+        ),
+        enhancement_pack_ids=[enhancement.pack_id for enhancement in record.enhancements],
+        composed_batch_sha256=record.composed_batch.sha256,
+    )
 
 
 def _source_metrics(
@@ -327,5 +368,6 @@ def _fault_summary(
 __all__ = [
     "EvaluationInputError",
     "evaluate_suite_execution",
+    "validate_composed_suite_case_counts",
     "validate_source_record_case_count",
 ]

@@ -22,14 +22,15 @@ def render_comparison_markdown(comparison: ComparisonResult) -> str:
         "## Suite Summary",
         "",
         (
-            "| Suite | Generator | Cases received / admitted | Admission | Operation coverage | "
-            "Clean false positives | Fault detection | Detected / 100 fault requests | "
-            "Total requests | Generation calls | Input / output tokens | Generation time | "
-            "Execution time | Estimated API cost |"
+            "| Suite | Generator | Cases received / native admitted | "
+            "Cases executed / shared | Admission | Operation coverage | Clean false positives | "
+            "Fault detection | Detected / 100 fault requests | Total requests | "
+            "Generation calls | Input / output tokens | Generation time | Execution time | "
+            "Estimated API cost |"
         ),
         (
             "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | "
-            "---: | ---: | ---: | ---: | ---: |"
+            "---: | ---: | ---: | ---: | ---: | ---: |"
         ),
     ]
     for suite in comparison.suites:
@@ -64,6 +65,10 @@ def render_comparison_markdown(comparison: ComparisonResult) -> str:
             "",
             "## Interpretation Notes",
             "",
+            (
+                "- Native admission belongs to the generator; shared cases are added only in "
+                "augmented arms and are reported separately."
+            ),
             "- Suite sizes are intentionally not equalized; raw request counts are reported.",
             (
                 "- Fault detection rate uses only triggered faults with a deterministic "
@@ -99,6 +104,7 @@ def _suite_row(suite: SuiteComparison) -> str:
                 f"`{suite.suite_id}`",
                 generator,
                 _metric_pair(suite.received_case_count, suite.admitted_case_count),
+                _metric_pair(suite.executed_case_count, suite.enhancement_case_count),
                 _percent(suite.admission_rate),
                 _percent(suite.operation_coverage_rate),
                 _percent(suite.clean_false_positive_rate),

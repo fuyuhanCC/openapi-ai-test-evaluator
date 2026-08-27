@@ -65,13 +65,14 @@ def compare_evaluations(
         ):
             raise ComparisonInputError("all evaluations must use the same fault set")
         _validate_generator_identity(group)
+        _validate_suite_composition(group)
         suites.append(_aggregate_suite(group, fault_ids))
 
     return ComparisonResult(
         schema_version="1.0",
         kind="ComparisonResult",
         comparison_id=comparison_id,
-        mode=ComparisonMode.NATIVE_SUITE,
+        mode=_comparison_mode(evaluations),
         spec_id=first_group[0].spec_id,
         repetitions=repetitions,
         fault_ids=fault_ids,
@@ -89,6 +90,35 @@ def _validate_generator_identity(group: list[EvaluationResult]) -> None:
         raise ComparisonInputError(
             f"suite {group[0].suite_id!r} changes generator identity across repetitions"
         )
+
+
+def _validate_suite_composition(group: list[EvaluationResult]) -> None:
+    compositions = [evaluation.composition for evaluation in group]
+    if any(composition is None for composition in compositions):
+        if not all(composition is None for composition in compositions):
+            raise ComparisonInputError(
+                f"suite {group[0].suite_id!r} changes enhancement configuration across repetitions"
+            )
+        return
+    configured = [composition for composition in compositions if composition is not None]
+    first = configured[0]
+    identity = (first.enhancement_case_count, tuple(first.enhancement_pack_ids))
+    if any(
+        (composition.enhancement_case_count, tuple(composition.enhancement_pack_ids)) != identity
+        for composition in configured[1:]
+    ):
+        raise ComparisonInputError(
+            f"suite {group[0].suite_id!r} changes enhancement configuration across repetitions"
+        )
+
+
+def _comparison_mode(evaluations: list[EvaluationResult]) -> ComparisonMode:
+    enhanced_count = sum(evaluation.composition is not None for evaluation in evaluations)
+    if enhanced_count == 0:
+        return ComparisonMode.NATIVE_SUITE
+    if enhanced_count == len(evaluations):
+        return ComparisonMode.AUGMENTED_SUITE
+    return ComparisonMode.MIXED_SUITE
 
 
 def _aggregate_suite(
@@ -111,6 +141,17 @@ def _aggregate_suite(
         ),
         admitted_case_count=_statistics(
             [evaluation.admission.admitted_case_count for evaluation in evaluations]
+        ),
+        enhancement_case_count=_statistics(
+            [
+                evaluation.composition.enhancement_case_count
+                if evaluation.composition is not None
+                else 0
+                for evaluation in evaluations
+            ]
+        ),
+        executed_case_count=_statistics(
+            [evaluation.execution.admitted_case_count for evaluation in evaluations]
         ),
         admission_rate=_statistics(
             [evaluation.admission.admission_rate for evaluation in evaluations]

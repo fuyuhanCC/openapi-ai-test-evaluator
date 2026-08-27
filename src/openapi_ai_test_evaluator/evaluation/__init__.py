@@ -1,12 +1,15 @@
 """Experiment orchestration and evaluation helpers."""
 
 from openapi_ai_test_evaluator.evaluation.input_artifacts import (
+    CompositionRecordLoadError,
     SourceRecordLoadError,
+    load_composition_record,
     load_source_record,
 )
 from openapi_ai_test_evaluator.evaluation.suite_evaluator import (
     EvaluationInputError,
     evaluate_suite_execution,
+    validate_composed_suite_case_counts,
     validate_source_record_case_count,
 )
 from openapi_ai_test_evaluator.evaluation.suite_pipeline import (
@@ -25,6 +28,7 @@ from openapi_ai_test_evaluator.evaluation.suite_runner import (
 
 __all__ = [
     "BenchmarkControlError",
+    "CompositionRecordLoadError",
     "EvaluatedSuite",
     "EvaluatedSuiteArtifactPaths",
     "EvaluationInputError",
@@ -33,9 +37,11 @@ __all__ = [
     "SuiteArtifactError",
     "execute_fault_suite",
     "evaluate_suite_execution",
+    "load_composition_record",
     "load_source_record",
     "run_evaluated_suite",
     "SourceRecordLoadError",
+    "validate_composed_suite_case_counts",
     "validate_source_record_case_count",
     "write_evaluated_suite_artifacts",
 ]

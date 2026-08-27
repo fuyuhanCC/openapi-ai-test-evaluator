@@ -105,6 +105,21 @@ class SuiteExecutionMetrics(ContractModel):
         return self
 
 
+class SuiteCompositionMetadata(ContractModel):
+    """Provenance of shared cases added after native generator admission."""
+
+    composition_id: Identifier
+    enhancement_case_count: PositiveInt
+    enhancement_pack_ids: list[Identifier] = Field(min_length=1)
+    composed_batch_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+    @model_validator(mode="after")
+    def validate_pack_ids(self) -> Self:
+        if len(self.enhancement_pack_ids) != len(set(self.enhancement_pack_ids)):
+            raise ValueError("enhancement pack IDs must be unique")
+        return self
+
+
 class FaultEvaluation(ContractModel):
     fault_id: Identifier
     run_id: Identifier
@@ -215,6 +230,7 @@ class EvaluationResult(ContractModel):
     spec_id: str = Field(min_length=1)
     generator: GeneratorMetadata
     admission: CaseAdmissionMetrics
+    composition: SuiteCompositionMetadata | None = None
     execution: SuiteExecutionMetrics
     fault_summary: FaultSummaryMetrics
     clean_run_id: Identifier
@@ -230,8 +246,14 @@ class EvaluationResult(ContractModel):
             raise ValueError("run IDs must be unique within an evaluation result")
         if len(self.faults) != self.fault_summary.configured_fault_count:
             raise ValueError("per-fault results must match configured_fault_count")
-        if self.admission.admitted_case_count != self.execution.admitted_case_count:
-            raise ValueError("admission and execution case counts must match")
+        enhancement_count = (
+            self.composition.enhancement_case_count if self.composition is not None else 0
+        )
+        expected_execution_count = self.admission.admitted_case_count + enhancement_count
+        if expected_execution_count != self.execution.admitted_case_count:
+            raise ValueError(
+                "execution case count must equal admitted source cases plus shared enhancements"
+            )
         outcome_counts = {
             outcome: sum(fault.outcome is outcome for fault in self.faults)
             for outcome in FaultEvaluationOutcome
@@ -271,5 +293,6 @@ __all__ = [
     "FaultSummaryMetrics",
     "GeneratorKind",
     "GeneratorMetadata",
+    "SuiteCompositionMetadata",
     "SuiteExecutionMetrics",
 ]

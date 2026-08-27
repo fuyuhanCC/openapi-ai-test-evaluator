@@ -624,6 +624,13 @@ execution quality, operation coverage, request and duration counts, aggregate
 fault metrics, per-fault outcomes, and the IDs of its underlying `RunResult`
 artifacts.
 
+For an augmented arm, optional composition metadata records the composition
+ID, enhancement pack IDs, enhancement case count, and composed-batch SHA-256.
+Native admission remains the generator's metric; total executed cases must
+equal native admitted cases plus shared enhancement cases. The pipeline checks
+the source record count, composition counts, and final batch hash before any
+benchmark control or test request.
+
 Per-fault outcomes are explicit rather than collapsed prematurely:
 
 - `detected`: a clean-passing case received the mutated response and failed a
@@ -647,12 +654,14 @@ source evaluation IDs and never hides unequal native suite sizes. For each
 suite, it records every per-repetition value plus population mean, standard
 deviation, minimum, maximum, and the number of missing observations.
 
-The summary includes admission and executable rates, operation coverage, clean
-false positives, fault detection, detections per 100 fault requests, raw
-request counts, durations, token usage, and estimated cost. Per-fault stability
-preserves all five evaluation outcome counts instead of reducing unstable or
-unevaluable runs to a false zero. Comparison reports describe the measurements
-but do not manufacture a single weighted winner score.
+The summary separately includes native admitted, shared enhancement, and total
+executed case counts, alongside admission and executable rates, operation
+coverage, clean false positives, fault detection, detections per 100 fault
+requests, raw request counts, durations, token usage, and estimated cost.
+Per-fault stability preserves all five evaluation outcome counts instead of
+reducing unstable or unevaluable runs to a false zero. Comparison reports
+describe the measurements but do not manufacture a single weighted winner
+score.
 
 ## 9. Generation
 
@@ -1173,6 +1182,7 @@ oate plan validate --spec <openapi-file> --plan <plan>
 oate run --spec <openapi-file> --plan <plan> --base-url <url>
 oate benchmark run-suite --spec <openapi-file> --cases <cases> \
   --source-record <generation-or-adaptation-record> [...] \
+  [--composition-record <composition-record>] \
   --output-directory <suite-repetition-directory>
 oate benchmark --config <benchmark-config>
 oate report compare --evaluation <evaluation-json> [...] \

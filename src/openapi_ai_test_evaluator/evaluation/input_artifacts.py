@@ -7,6 +7,7 @@ from typing import Annotated
 
 from pydantic import Field, TypeAdapter, ValidationError
 
+from openapi_ai_test_evaluator.domain.composition import SuiteCompositionRecord
 from openapi_ai_test_evaluator.domain.generation import AdaptationRecord, GenerationRecord
 
 SourceRecord = Annotated[
@@ -18,6 +19,10 @@ _SOURCE_RECORD_ADAPTER = TypeAdapter(SourceRecord)
 
 class SourceRecordLoadError(ValueError):
     """A generation or adaptation record cannot be read or validated."""
+
+
+class CompositionRecordLoadError(ValueError):
+    """A suite composition record cannot be read or validated."""
 
 
 def load_source_record(path: Path) -> GenerationRecord | AdaptationRecord:
@@ -32,4 +37,24 @@ def load_source_record(path: Path) -> GenerationRecord | AdaptationRecord:
         raise SourceRecordLoadError(f"invalid source record {path}: {error}") from error
 
 
-__all__ = ["SourceRecord", "SourceRecordLoadError", "load_source_record"]
+def load_composition_record(path: Path) -> SuiteCompositionRecord:
+    """Read one canonical SuiteCompositionRecord JSON artifact."""
+    try:
+        serialized = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise CompositionRecordLoadError(f"cannot read {path}: {error}") from error
+    try:
+        return SuiteCompositionRecord.model_validate_json(serialized)
+    except ValidationError as error:
+        raise CompositionRecordLoadError(
+            f"invalid composition record {path}: {error}"
+        ) from error
+
+
+__all__ = [
+    "CompositionRecordLoadError",
+    "SourceRecord",
+    "SourceRecordLoadError",
+    "load_composition_record",
+    "load_source_record",
+]

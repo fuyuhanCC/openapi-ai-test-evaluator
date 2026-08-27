@@ -62,8 +62,9 @@ oracles.
 - Clean-versus-fault suite orchestration that resets the SUT, executes the same
   frozen batch in every state, records proxy trigger evidence, and restores
   pass-through mode after the run.
-- Strict per-suite `EvaluationResult` metrics for admission, executable cases,
-  clean false positives, operation coverage, request counts, and fault
+- Strict per-suite `EvaluationResult` metrics that keep native generator
+  admission separate from shared enhancement and total executed case counts,
+  plus clean false positives, operation coverage, request counts, and fault
   detection with same-case proxy evidence.
 - A single-suite pipeline that connects one frozen batch to clean/fault
   execution and evaluation, then preserves the clean run, every fault run, and
@@ -199,7 +200,11 @@ uv run oate benchmark run-suite \
 The command writes the clean `RunResult`, one `RunResult` per fault, and the
 derived `EvaluationResult` to separate files. Existing output directories are
 rejected unless `--overwrite` is explicit. Run the same command with the
-DeepSeek cases and `GenerationRecord`, then compare the paired evaluations:
+DeepSeek cases and `GenerationRecord`. For an enhanced arm, point `--cases` to
+the composed batch and also pass its receipt, for example
+`--composition-record artifacts/compositions/deepseek-demo-001-enhanced.json`.
+The evaluator checks native counts, composed counts, and the composed batch
+SHA-256 before sending requests. Then compare the paired evaluations:
 
 ```bash
 uv run oate report compare \

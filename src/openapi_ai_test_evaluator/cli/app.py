@@ -24,9 +24,11 @@ from openapi_ai_test_evaluator.domain import (
 from openapi_ai_test_evaluator.domain.execution import ExecutionOutcome
 from openapi_ai_test_evaluator.evaluation import (
     BenchmarkControlError,
+    CompositionRecordLoadError,
     EvaluationInputError,
     SourceRecordLoadError,
     SuiteArtifactError,
+    load_composition_record,
     load_source_record,
     run_evaluated_suite,
     write_evaluated_suite_artifacts,
@@ -139,6 +141,17 @@ def run_benchmark_suite(
         Path,
         typer.Option("--output-directory", file_okay=False, dir_okay=True),
     ],
+    composition_record: Annotated[
+        Path | None,
+        typer.Option(
+            "--composition-record",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            help="Optional SuiteCompositionRecord for a shared-enhancement arm.",
+        ),
+    ] = None,
     repetition: Annotated[
         int,
         typer.Option("--repetition", min=1, help="One-based paired repetition number."),
@@ -174,9 +187,19 @@ def run_benchmark_suite(
     except SourceRecordLoadError as error:
         _report_benchmark_error("source-record", error, json_output)
 
+    composition = None
+    if composition_record is not None:
+        try:
+            composition = load_composition_record(composition_record)
+        except CompositionRecordLoadError as error:
+            _report_benchmark_error("composition-record", error, json_output)
+
+    protected_inputs = [spec, cases, source_record]
+    if composition_record is not None:
+        protected_inputs.append(composition_record)
     _prepare_benchmark_output(
         output_directory,
-        [spec, cases, source_record],
+        protected_inputs,
         overwrite,
         json_output,
     )
@@ -193,6 +216,7 @@ def run_benchmark_suite(
             proxy_control_url=proxy_control_url,
             sut_reset_url=sut_reset_url,
             fault_ids=fault_ids,
+            composition_record=composition,
             timeout_ms=timeout_ms,
             allow_mutations=allow_mutations,
         )
@@ -216,6 +240,13 @@ def run_benchmark_suite(
         "clean_outcome": evaluated.execution.clean.outcome.value,
         "configured_faults": evaluated.evaluation.fault_summary.configured_fault_count,
         "detected_faults": evaluated.evaluation.fault_summary.detected_fault_count,
+        "native_cases": evaluated.evaluation.admission.admitted_case_count,
+        "enhancement_cases": (
+            evaluated.evaluation.composition.enhancement_case_count
+            if evaluated.evaluation.composition is not None
+            else 0
+        ),
+        "executed_cases": evaluated.evaluation.execution.admitted_case_count,
         "output_directory": str(output_directory),
         "evaluation_output": str(paths.evaluation),
     }

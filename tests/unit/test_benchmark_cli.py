@@ -31,8 +31,12 @@ def write_source_record(path: Path) -> None:
     path.write_text(record.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
 
-def command_arguments(source_record: Path, output_directory: Path) -> list[str]:
-    return [
+def command_arguments(
+    source_record: Path,
+    output_directory: Path,
+    composition_record: Path | None = None,
+) -> list[str]:
+    arguments = [
         "benchmark",
         "run-suite",
         "--spec",
@@ -59,6 +63,9 @@ def command_arguments(source_record: Path, output_directory: Path) -> list[str]:
         str(output_directory),
         "--json",
     ]
+    if composition_record is not None:
+        arguments.extend(["--composition-record", str(composition_record)])
+    return arguments
 
 
 def test_run_suite_connects_validated_inputs_execution_and_artifacts(
@@ -85,6 +92,9 @@ def test_run_suite_connects_validated_inputs_execution_and_artifacts(
                     configured_fault_count=2,
                     detected_fault_count=1,
                 ),
+                admission=SimpleNamespace(admitted_case_count=1),
+                composition=None,
+                execution=SimpleNamespace(admitted_case_count=1),
             ),
         )
 
@@ -124,11 +134,15 @@ def test_run_suite_connects_validated_inputs_execution_and_artifacts(
         "clean_outcome": "passed",
         "configured_faults": 2,
         "detected_faults": 1,
+        "native_cases": 1,
+        "enhancement_cases": 0,
+        "executed_cases": 1,
         "output_directory": str(output_directory),
         "evaluation_output": str(output_directory / "evaluation" / "evaluation.json"),
     }
     assert captured["fault_ids"] == ["status-fault", "missing-field-fault"]
     assert captured["evaluation_id"] == "evaluation-schemathesis-r2"
+    assert captured["composition_record"] is None
     assert captured["destination"] == output_directory
     assert captured["overwrite"] is False
 
@@ -158,6 +172,40 @@ def test_run_suite_rejects_invalid_source_record_before_execution(
 
     assert result.exit_code == 1
     assert json.loads(result.stdout)["stage"] == "source-record"
+    assert executed is False
+
+
+def test_run_suite_rejects_invalid_composition_record_before_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_record = tmp_path / "adaptation.json"
+    composition_record = tmp_path / "composition.json"
+    write_source_record(source_record)
+    composition_record.write_text("{}\n", encoding="utf-8")
+    executed = False
+
+    def fake_run(*args: object, **kwargs: object) -> object:
+        nonlocal executed
+        executed = True
+        raise AssertionError("execution must not start")
+
+    monkeypatch.setattr(
+        "openapi_ai_test_evaluator.cli.app.run_evaluated_suite",
+        fake_run,
+    )
+
+    result = runner.invoke(
+        app,
+        command_arguments(
+            source_record,
+            tmp_path / "schemathesis-enhanced-r2",
+            composition_record,
+        ),
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["stage"] == "composition-record"
     assert executed is False
 
 

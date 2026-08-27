@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from openapi_ai_test_evaluator.domain.composition import SuiteCompositionRecord
 from openapi_ai_test_evaluator.domain.generation import (
     AdaptationRecord,
     CaseAdmissionSummary,
@@ -10,7 +11,9 @@ from openapi_ai_test_evaluator.domain.generation import (
     GenerationStatus,
 )
 from openapi_ai_test_evaluator.evaluation import (
+    CompositionRecordLoadError,
     SourceRecordLoadError,
+    load_composition_record,
     load_source_record,
 )
 
@@ -70,3 +73,35 @@ def test_rejects_unknown_source_record_kind(tmp_path: Path) -> None:
 
     with pytest.raises(SourceRecordLoadError, match="invalid source record"):
         load_source_record(path)
+
+
+def test_loads_a_composition_record(tmp_path: Path) -> None:
+    path = tmp_path / "composition.json"
+    record = SuiteCompositionRecord.model_validate(
+        {
+            "schema_version": "1.0",
+            "kind": "SuiteCompositionRecord",
+            "composition_id": "deepseek-enhanced-r1",
+            "base_batch": {"case_count": 2, "sha256": "0" * 64},
+            "enhancements": [
+                {
+                    "pack_id": "shared-relations-v1",
+                    "batch": {"case_count": 1, "sha256": "1" * 64},
+                }
+            ],
+            "composed_batch": {"case_count": 3, "sha256": "2" * 64},
+        }
+    )
+    path.write_text(record.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    loaded = load_composition_record(path)
+
+    assert loaded.composition_id == "deepseek-enhanced-r1"
+
+
+def test_rejects_invalid_composition_record(tmp_path: Path) -> None:
+    path = tmp_path / "composition.json"
+    path.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(CompositionRecordLoadError, match="invalid composition record"):
+        load_composition_record(path)

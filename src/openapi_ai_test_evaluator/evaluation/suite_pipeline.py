@@ -7,18 +7,22 @@ from pathlib import Path
 
 import httpx
 
+from openapi_ai_test_evaluator.domain.composition import SuiteCompositionRecord
 from openapi_ai_test_evaluator.domain.evaluation import EvaluationResult
 from openapi_ai_test_evaluator.domain.generation import AdaptationRecord, GenerationRecord
 from openapi_ai_test_evaluator.domain.openapi import OpenAPISpec
 from openapi_ai_test_evaluator.domain.test_case import TestCaseBatch
 from openapi_ai_test_evaluator.evaluation.suite_evaluator import (
+    EvaluationInputError,
     evaluate_suite_execution,
+    validate_composed_suite_case_counts,
     validate_source_record_case_count,
 )
 from openapi_ai_test_evaluator.evaluation.suite_runner import (
     SuiteExecution,
     execute_fault_suite,
 )
+from openapi_ai_test_evaluator.generation.batch_composer import case_batch_sha256
 
 
 class SuiteArtifactError(RuntimeError):
@@ -68,13 +72,25 @@ def run_evaluated_suite(
     proxy_control_url: str,
     sut_reset_url: str,
     fault_ids: list[str],
+    composition_record: SuiteCompositionRecord | None = None,
     timeout_ms: int = 5000,
     allow_mutations: bool = False,
     execution_transport: httpx.BaseTransport | None = None,
     control_transport: httpx.BaseTransport | None = None,
 ) -> EvaluatedSuite:
     """Execute and evaluate one already-generated, unchanged test suite."""
-    validate_source_record_case_count(source_record, len(batch.cases))
+    if composition_record is None:
+        validate_source_record_case_count(source_record, len(batch.cases))
+    else:
+        validate_composed_suite_case_counts(
+            source_record,
+            composition_record,
+            len(batch.cases),
+        )
+        if case_batch_sha256(batch) != composition_record.composed_batch.sha256:
+            raise EvaluationInputError(
+                "frozen batch content does not match the composition record hash"
+            )
     execution = execute_fault_suite(
         batch,
         spec,
@@ -94,6 +110,7 @@ def run_evaluated_suite(
         spec,
         source_record,
         evaluation_id=evaluation_id,
+        composition_record=composition_record,
     )
     return EvaluatedSuite(execution=execution, evaluation=evaluation)
 

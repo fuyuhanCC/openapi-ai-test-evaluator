@@ -15,6 +15,10 @@ from openapi_ai_test_evaluator.evaluation.suite_runner import (
     BenchmarkControlError,
     execute_fault_suite,
 )
+from openapi_ai_test_evaluator.generation import (
+    NamedEnhancementBatch,
+    compose_test_case_batches,
+)
 from openapi_ai_test_evaluator.spec import load_openapi
 
 SPEC = load_openapi(Path("examples/demo-items/openapi.yaml"))
@@ -185,6 +189,110 @@ def test_connects_one_suite_execution_to_its_evaluation() -> None:
     assert evaluated.evaluation.generator.name == "schemathesis"
     assert evaluated.evaluation.fault_summary.detected_fault_count == 1
     assert evaluated.evaluation.faults[0].run_id == "schemathesis-r1-status-fault"
+
+
+def test_connects_composed_batch_provenance_to_its_evaluation() -> None:
+    enhancement = CaseBatch.model_validate(
+        {
+            "schema_version": "1.0",
+            "cases": [
+                {
+                    "id": "list-items-shared-check",
+                    "steps": [
+                        {
+                            "id": "list-shared",
+                            "operation_id": "listItems",
+                            "assertions": [{"operator": "status_is", "expected": 200}],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    composed = compose_test_case_batches(
+        BATCH,
+        [NamedEnhancementBatch(pack_id="shared-checks-v1", batch=enhancement)],
+        composition_id="schemathesis-enhanced-r1",
+    )
+    benchmark = FakeBenchmark()
+
+    evaluated = run_evaluated_suite(
+        composed.batch,
+        SPEC,
+        AdaptationRecord(
+            schema_version="1.0",
+            kind="AdaptationRecord",
+            tool="schemathesis",
+            tool_version="4.25.2",
+            adapter_version="schemathesis-case-v1",
+            seed=7,
+            duration_ms=2,
+            received_case_count=1,
+            adapted_case_count=1,
+            rejected_case_count=0,
+            skip_reasons=[],
+        ),
+        suite_id="schemathesis-enhanced",
+        repetition=1,
+        evaluation_id="evaluation-schemathesis-enhanced-r1",
+        runner_base_url="http://proxy.test",
+        proxy_control_url="http://proxy.test",
+        sut_reset_url="http://sut.test/__test__/reset",
+        fault_ids=[],
+        composition_record=composed.record,
+        execution_transport=httpx.MockTransport(benchmark.handle_execution),
+        control_transport=httpx.MockTransport(benchmark.handle_control),
+    )
+
+    assert evaluated.evaluation.admission.admitted_case_count == 1
+    assert evaluated.evaluation.composition is not None
+    assert evaluated.evaluation.composition.enhancement_case_count == 1
+    assert evaluated.evaluation.execution.admitted_case_count == 2
+
+
+def test_rejects_composed_batch_hash_mismatch_before_control_requests() -> None:
+    enhancement = BATCH.model_copy(
+        update={"cases": [BATCH.cases[0].model_copy(update={"id": "shared-list"})]}
+    )
+    composed = compose_test_case_batches(
+        BATCH,
+        [NamedEnhancementBatch(pack_id="shared-checks-v1", batch=enhancement)],
+        composition_id="schemathesis-enhanced-r1",
+    )
+    wrong_batch = composed.batch.model_copy(
+        update={
+            "cases": [
+                *composed.batch.cases[:-1],
+                composed.batch.cases[-1].model_copy(update={"id": "changed-after-compose"}),
+            ]
+        }
+    )
+
+    with pytest.raises(EvaluationInputError, match="composition record hash"):
+        run_evaluated_suite(
+            wrong_batch,
+            SPEC,
+            AdaptationRecord(
+                schema_version="1.0",
+                kind="AdaptationRecord",
+                tool="schemathesis",
+                tool_version="4.25.2",
+                adapter_version="schemathesis-case-v1",
+                seed=7,
+                received_case_count=1,
+                adapted_case_count=1,
+                rejected_case_count=0,
+                skip_reasons=[],
+            ),
+            suite_id="schemathesis-enhanced",
+            repetition=1,
+            evaluation_id="evaluation-schemathesis-enhanced-r1",
+            runner_base_url="http://proxy.test",
+            proxy_control_url="http://proxy.test",
+            sut_reset_url="http://sut.test/__test__/reset",
+            fault_ids=[],
+            composition_record=composed.record,
+        )
 
 
 def test_rejects_source_record_count_before_any_control_request() -> None:

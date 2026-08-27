@@ -163,6 +163,21 @@ def paired_evaluations() -> list[EvaluationResult]:
     ]
 
 
+def with_shared_enhancement(item: EvaluationResult, count: int = 2) -> EvaluationResult:
+    raw = item.model_dump(mode="json")
+    raw["composition"] = {
+        "composition_id": f"composition-{item.suite_id}-r{item.repetition}",
+        "enhancement_case_count": count,
+        "enhancement_pack_ids": ["shared-relations-v1"],
+        "composed_batch_sha256": "a" * 64,
+    }
+    raw["execution"]["admitted_case_count"] += count
+    raw["execution"]["clean_passed_case_count"] += count
+    raw["execution"]["clean_request_count"] += count
+    raw["execution"]["total_request_count"] += count
+    return EvaluationResult.model_validate(raw)
+
+
 def test_aggregates_raw_normalized_cost_and_fault_stability_metrics() -> None:
     comparison = compare_evaluations(paired_evaluations(), comparison_id="deepseek-vs-schemathesis")
 
@@ -171,6 +186,8 @@ def test_aggregates_raw_normalized_cost_and_fault_stability_metrics() -> None:
     deepseek, schemathesis = comparison.suites
     assert deepseek.suite_id == "deepseek"
     assert deepseek.admitted_case_count.values == [2.0, 3.0]
+    assert deepseek.enhancement_case_count.values == [0.0, 0.0]
+    assert deepseek.executed_case_count.values == [2.0, 3.0]
     assert deepseek.admission_rate.mean == pytest.approx(0.625)
     assert deepseek.admission_rate.stddev == pytest.approx(0.125)
     assert deepseek.fault_detection_rate.mean == pytest.approx(0.5)
@@ -186,12 +203,29 @@ def test_aggregates_raw_normalized_cost_and_fault_stability_metrics() -> None:
     assert schemathesis.estimated_cost_usd.missing_count == 2
 
 
+def test_reports_native_and_shared_case_counts_for_mixed_four_arm_comparisons() -> None:
+    evaluations = [
+        with_shared_enhancement(item) if item.suite_id == "deepseek" else item
+        for item in paired_evaluations()
+    ]
+
+    comparison = compare_evaluations(evaluations, comparison_id="native-and-enhanced")
+
+    assert comparison.mode.value == "mixed_suite"
+    deepseek, schemathesis = comparison.suites
+    assert deepseek.admitted_case_count.values == [2.0, 3.0]
+    assert deepseek.enhancement_case_count.values == [2.0, 2.0]
+    assert deepseek.executed_case_count.values == [4.0, 5.0]
+    assert schemathesis.enhancement_case_count.values == [0.0, 0.0]
+
+
 def test_renders_a_human_readable_report_with_source_traceability() -> None:
     comparison = compare_evaluations(paired_evaluations(), comparison_id="deepseek-vs-schemathesis")
 
     report = render_comparison_markdown(comparison)
 
     assert "# API Test Generation Comparison: deepseek-vs-schemathesis" in report
+    assert "Cases executed / shared" in report
     assert "`deepseek`" in report
     assert "62.5% ± 12.5%" in report
     assert "D/M/T/E/I=1/1/0/0/0" in report

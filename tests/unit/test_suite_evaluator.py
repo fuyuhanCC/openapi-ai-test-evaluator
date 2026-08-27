@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from openapi_ai_test_evaluator.domain.composition import SuiteCompositionRecord
 from openapi_ai_test_evaluator.domain.evaluation import (
     FaultEvaluationOutcome,
     GeneratorKind,
@@ -363,6 +364,50 @@ def test_maps_schemathesis_adaptation_to_same_admission_metrics() -> None:
     assert result.generator.name == "schemathesis"
     assert result.generator.generation_request_count == 0
     assert result.admission.admission_rate == pytest.approx(0.75)
+
+
+def test_keeps_native_admission_separate_from_shared_enhancement_execution() -> None:
+    record = AdaptationRecord(
+        schema_version="1.0",
+        kind="AdaptationRecord",
+        tool="schemathesis",
+        tool_version="4.25.2",
+        adapter_version="schemathesis-case-v1",
+        seed=0,
+        received_case_count=2,
+        adapted_case_count=2,
+        rejected_case_count=0,
+        skip_reasons=[],
+    )
+    composition = SuiteCompositionRecord.model_validate(
+        {
+            "schema_version": "1.0",
+            "kind": "SuiteCompositionRecord",
+            "composition_id": "schemathesis-enhanced-r1",
+            "base_batch": {"case_count": 2, "sha256": "0" * 64},
+            "enhancements": [
+                {
+                    "pack_id": "shared-relations-v1",
+                    "batch": {"case_count": 1, "sha256": "1" * 64},
+                }
+            ],
+            "composed_batch": {"case_count": 3, "sha256": "2" * 64},
+        }
+    )
+
+    result = evaluate_suite_execution(
+        suite_execution(),
+        SPEC,
+        record,
+        evaluation_id="evaluation-schemathesis-enhanced-r1",
+        composition_record=composition,
+    )
+
+    assert result.admission.admitted_case_count == 2
+    assert result.composition is not None
+    assert result.composition.enhancement_case_count == 1
+    assert result.composition.enhancement_pack_ids == ["shared-relations-v1"]
+    assert result.execution.admitted_case_count == 3
 
 
 def test_rejects_trigger_count_without_matching_response_evidence() -> None:

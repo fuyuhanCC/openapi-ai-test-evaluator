@@ -19,6 +19,8 @@ Rate = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
 
 class ComparisonMode(StrEnum):
     NATIVE_SUITE = "native_suite"
+    AUGMENTED_SUITE = "augmented_suite"
+    MIXED_SUITE = "mixed_suite"
 
 
 class ComparedGenerator(ContractModel):
@@ -108,6 +110,8 @@ class SuiteComparison(ContractModel):
     evaluation_ids: list[Identifier] = Field(min_length=1)
     received_case_count: MetricStatistics
     admitted_case_count: MetricStatistics
+    enhancement_case_count: MetricStatistics
+    executed_case_count: MetricStatistics
     admission_rate: MetricStatistics
     executable_case_rate: MetricStatistics
     clean_false_positive_rate: MetricStatistics
@@ -190,6 +194,8 @@ class ComparisonResult(ContractModel):
 _SUITE_METRIC_FIELDS = (
     "received_case_count",
     "admitted_case_count",
+    "enhancement_case_count",
+    "executed_case_count",
     "admission_rate",
     "executable_case_rate",
     "clean_false_positive_rate",
