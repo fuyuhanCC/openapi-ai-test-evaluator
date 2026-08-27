@@ -23,13 +23,17 @@ from openapi_ai_test_evaluator.domain import (
 )
 from openapi_ai_test_evaluator.domain.execution import ExecutionOutcome
 from openapi_ai_test_evaluator.evaluation import (
+    BenchmarkConfigLoadError,
     BenchmarkControlError,
+    BenchmarkRunError,
     CompositionRecordLoadError,
     EvaluationInputError,
     SourceRecordLoadError,
     SuiteArtifactError,
+    load_benchmark_config,
     load_composition_record,
     load_source_record,
+    run_benchmark_config,
     run_evaluated_suite,
     write_evaluated_suite_artifacts,
 )
@@ -94,6 +98,92 @@ class GenerationProviderChoice(StrEnum):
 
 class BaselineToolChoice(StrEnum):
     SCHEMATHESIS = "schemathesis"
+
+
+@benchmark_app.command("run")
+def run_configured_benchmark(
+    config_path: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            help="BenchmarkConfig YAML describing every suite repetition.",
+        ),
+    ],
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Allow replacing configured benchmark artifacts."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit a machine-readable command summary."),
+    ] = False,
+) -> None:
+    """Run all configured suites sequentially and write one comparison report."""
+    try:
+        config = load_benchmark_config(config_path)
+    except BenchmarkConfigLoadError as error:
+        _report_configured_benchmark_error("config", error, json_output)
+    try:
+        result = run_benchmark_config(config, config_path, overwrite=overwrite)
+    except BenchmarkRunError as error:
+        _report_configured_benchmark_error(
+            error.stage,
+            error,
+            json_output,
+            suite_id=error.suite_id,
+            repetition=error.repetition,
+        )
+
+    summary = {
+        "status": "completed",
+        "benchmark_id": result.benchmark_id,
+        "suites": len(result.comparison.suites),
+        "repetitions": len(result.comparison.repetitions),
+        "evaluations": len(result.evaluations),
+        "comparison_id": result.comparison.comparison_id,
+        "json_output": str(result.comparison_json),
+        "markdown_output": str(result.comparison_markdown),
+    }
+    if json_output:
+        typer.echo(json.dumps(summary))
+    else:
+        typer.echo(
+            f"Benchmark {result.benchmark_id}: completed "
+            f"({_count_label(len(result.comparison.suites), 'suite')}, "
+            f"{_count_label(len(result.comparison.repetitions), 'repetition')}); "
+            f"wrote {result.comparison_json}, {result.comparison_markdown}"
+        )
+
+
+def _report_configured_benchmark_error(
+    stage: str,
+    error: Exception,
+    json_output: bool,
+    *,
+    suite_id: str | None = None,
+    repetition: int | None = None,
+) -> NoReturn:
+    payload: dict[str, object] = {
+        "status": "not_completed",
+        "stage": stage,
+        "error": str(error),
+    }
+    if suite_id is not None:
+        payload["suite_id"] = suite_id
+    if repetition is not None:
+        payload["repetition"] = repetition
+    if json_output:
+        typer.echo(json.dumps(payload))
+    else:
+        context = ""
+        if suite_id is not None and repetition is not None:
+            context = f" for {suite_id} repetition {repetition}"
+        typer.echo(f"Cannot complete benchmark ({stage}){context}: {error}", err=True)
+    raise typer.Exit(code=1)
 
 
 @benchmark_app.command("run-suite")

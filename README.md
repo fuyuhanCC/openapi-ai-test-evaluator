@@ -72,6 +72,9 @@ oracles.
 - Strict multi-suite `ComparisonResult` aggregation across paired repetitions,
   including raw suite size, normalized efficiency, mean/standard deviation,
   missing-value accounting, and per-fault outcome stability.
+- A strict `BenchmarkConfig` YAML and `oate benchmark run --config` command that
+  preflights every paired input before HTTP traffic, runs suites sequentially,
+  preserves per-run artifacts, and writes the final comparison automatically.
 - `oate report compare` output in machine-readable JSON and human-readable
   Markdown, preserving every source evaluation ID for traceability.
 - `oate cases validate` and `oate cases run` commands with structural and
@@ -196,6 +199,19 @@ uv run oate benchmark run-suite \
   --output-directory artifacts/runs/schemathesis-r1 \
   --allow-mutations
 ```
+
+Once all native and enhanced input artifacts exist, the complete four-arm
+matrix can instead be run with one command while the same two services are up:
+
+```bash
+uv run oate benchmark run \
+  --config benchmarks/demo_items/pilot-four-arm.yaml
+```
+
+Paths inside the config are resolved relative to the config file. Every suite
+lists a separate frozen input for each repetition, so repeated LLM generations
+can be compared without pretending that rerunning one fixed batch measures
+generation variability.
 
 The command writes the clean `RunResult`, one `RunResult` per fault, and the
 derived `EvaluationResult` to separate files. Existing output directories are

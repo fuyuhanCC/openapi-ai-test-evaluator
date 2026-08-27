@@ -1184,7 +1184,7 @@ oate benchmark run-suite --spec <openapi-file> --cases <cases> \
   --source-record <generation-or-adaptation-record> [...] \
   [--composition-record <composition-record>] \
   --output-directory <suite-repetition-directory>
-oate benchmark --config <benchmark-config>
+oate benchmark run --config <benchmark-config>
 oate report compare --evaluation <evaluation-json> [...] \
   --json-output <comparison-json> --markdown-output <comparison-markdown>
 ```
@@ -1192,13 +1192,16 @@ oate report compare --evaluation <evaluation-json> [...] \
 Command output is concise for humans and supports JSON mode for CI.
 `oate cases generate`, `oate cases generate-baseline`, `oate cases validate`,
 `oate cases run`, `oate plan validate`, `oate plan schema`, `oate run`,
-`oate benchmark run-suite`, and `oate report compare` are currently
-implemented. The multi-suite benchmark-config command remains planned. Run commands
-repeat semantic validation before opening the transport, execute cases
-serially with isolated variable scopes, and return nonzero for failed or
-errored runs while preserving the `RunResult` JSON. The supplied base URL is the
-sole target origin and redirects are disabled. Mutating cases require the
-explicit `--allow-mutations` confirmation for an isolated test environment.
+`oate benchmark run-suite`, `oate benchmark run --config`, and
+`oate report compare` are currently implemented. The configured command
+preflights all suite artifacts before opening the transport, executes every
+suite repetition sequentially, preserves its raw/evaluation artifacts, and
+writes one comparison JSON and Markdown report. Run commands repeat semantic
+validation before opening the transport, execute cases serially with isolated
+variable scopes, and return nonzero for failed or errored runs while preserving
+the `RunResult` JSON. The supplied base URL is the sole target origin and
+redirects are disabled. Mutating cases require the explicit
+`allow_mutations: true` confirmation for an isolated test environment.
 
 ## 18. Target Repository Layout
 

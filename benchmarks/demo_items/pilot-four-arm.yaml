@@ -1,0 +1,49 @@
+schema_version: "1.0"
+kind: BenchmarkConfig
+benchmark_id: demo-items-four-arm-pilot
+spec: ../../examples/demo-items/openapi.yaml
+repetitions: [1]
+fault_ids:
+  - get-id-as-string
+  - get-missing-name
+  - get-status-error
+  - list-duplicate-first-item
+endpoints:
+  runner_base_url: http://127.0.0.1:8001
+  proxy_control_url: http://127.0.0.1:8001
+  sut_reset_url: http://127.0.0.1:8000/__test__/reset
+execution:
+  timeout_ms: 5000
+  allow_mutations: true
+suites:
+  - suite_id: deepseek-native
+    arm: native
+    inputs:
+      - repetition: 1
+        cases: ../../artifacts/cases/deepseek-pilot-003.json
+        source_record: ../../artifacts/generations/deepseek-pilot-003.json
+  - suite_id: deepseek-enhanced
+    arm: enhanced
+    inputs:
+      - repetition: 1
+        cases: ../../artifacts/cases/deepseek-pilot-003-enhanced.json
+        source_record: ../../artifacts/generations/deepseek-pilot-003.json
+        composition_record: ../../artifacts/compositions/deepseek-pilot-003-enhanced.json
+  - suite_id: schemathesis-native
+    arm: native
+    inputs:
+      - repetition: 1
+        cases: ../../artifacts/cases/schemathesis-pilot-002.json
+        source_record: ../../artifacts/adaptations/schemathesis-pilot-002.json
+  - suite_id: schemathesis-enhanced
+    arm: enhanced
+    inputs:
+      - repetition: 1
+        cases: ../../artifacts/cases/schemathesis-pilot-002-enhanced.json
+        source_record: ../../artifacts/adaptations/schemathesis-pilot-002.json
+        composition_record: ../../artifacts/compositions/schemathesis-pilot-002-enhanced.json
+output_directory: ../../artifacts/runs/configured-four-arm
+report:
+  comparison_id: demo-items-four-arm-configured
+  json_output: ../../artifacts/reports/demo-items-four-arm-configured.json
+  markdown_output: ../../artifacts/reports/demo-items-four-arm-configured.md

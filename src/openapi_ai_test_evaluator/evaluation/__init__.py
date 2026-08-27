@@ -1,5 +1,15 @@
 """Experiment orchestration and evaluation helpers."""
 
+from openapi_ai_test_evaluator.evaluation.benchmark_config import (
+    BenchmarkConfigLoadError,
+    load_benchmark_config,
+)
+from openapi_ai_test_evaluator.evaluation.benchmark_pipeline import (
+    BenchmarkResult,
+    BenchmarkRunError,
+    BenchmarkSuiteArtifact,
+    run_benchmark_config,
+)
 from openapi_ai_test_evaluator.evaluation.input_artifacts import (
     CompositionRecordLoadError,
     SourceRecordLoadError,
@@ -28,6 +38,10 @@ from openapi_ai_test_evaluator.evaluation.suite_runner import (
 
 __all__ = [
     "BenchmarkControlError",
+    "BenchmarkConfigLoadError",
+    "BenchmarkResult",
+    "BenchmarkRunError",
+    "BenchmarkSuiteArtifact",
     "CompositionRecordLoadError",
     "EvaluatedSuite",
     "EvaluatedSuiteArtifactPaths",
@@ -38,8 +52,10 @@ __all__ = [
     "execute_fault_suite",
     "evaluate_suite_execution",
     "load_composition_record",
+    "load_benchmark_config",
     "load_source_record",
     "run_evaluated_suite",
+    "run_benchmark_config",
     "SourceRecordLoadError",
     "validate_composed_suite_case_counts",
     "validate_source_record_case_count",

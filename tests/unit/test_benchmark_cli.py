@@ -8,10 +8,94 @@ from typer.testing import CliRunner
 from openapi_ai_test_evaluator.cli.app import app
 from openapi_ai_test_evaluator.domain.execution import ExecutionOutcome
 from openapi_ai_test_evaluator.domain.generation import AdaptationRecord
-from openapi_ai_test_evaluator.evaluation import EvaluatedSuiteArtifactPaths
+from openapi_ai_test_evaluator.evaluation import (
+    BenchmarkRunError,
+    EvaluatedSuiteArtifactPaths,
+)
 
 ROOT = Path(__file__).parents[2]
 runner = CliRunner()
+
+
+def test_run_config_executes_the_loaded_matrix_and_reports_outputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = ROOT / "benchmarks/demo_items/pilot-four-arm.yaml"
+    captured: dict[str, object] = {}
+
+    def fake_run(config: object, path: Path, *, overwrite: bool) -> object:
+        captured["config"] = config
+        captured["path"] = path
+        captured["overwrite"] = overwrite
+        return SimpleNamespace(
+            benchmark_id="demo-items-four-arm-pilot",
+            evaluations=[object(), object(), object(), object()],
+            comparison=SimpleNamespace(
+                suites=[object(), object(), object(), object()],
+                repetitions=[1],
+                comparison_id="demo-items-four-arm-configured",
+            ),
+            comparison_json=tmp_path / "comparison.json",
+            comparison_markdown=tmp_path / "comparison.md",
+        )
+
+    monkeypatch.setattr(
+        "openapi_ai_test_evaluator.cli.app.run_benchmark_config",
+        fake_run,
+    )
+
+    result = runner.invoke(
+        app,
+        ["benchmark", "run", "--config", str(config_path), "--json"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == {
+        "status": "completed",
+        "benchmark_id": "demo-items-four-arm-pilot",
+        "suites": 4,
+        "repetitions": 1,
+        "evaluations": 4,
+        "comparison_id": "demo-items-four-arm-configured",
+        "json_output": str(tmp_path / "comparison.json"),
+        "markdown_output": str(tmp_path / "comparison.md"),
+    }
+    assert captured["path"] == config_path
+    assert captured["overwrite"] is False
+
+
+def test_run_config_reports_suite_and_repetition_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = ROOT / "benchmarks/demo_items/pilot-four-arm.yaml"
+
+    def fake_run(*args: object, **kwargs: object) -> object:
+        raise BenchmarkRunError(
+            "suite-execution",
+            "proxy unavailable",
+            suite_id="deepseek-enhanced",
+            repetition=1,
+        )
+
+    monkeypatch.setattr(
+        "openapi_ai_test_evaluator.cli.app.run_benchmark_config",
+        fake_run,
+    )
+
+    result = runner.invoke(
+        app,
+        ["benchmark", "run", "--config", str(config_path), "--json"],
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout) == {
+        "status": "not_completed",
+        "stage": "suite-execution",
+        "error": "proxy unavailable",
+        "suite_id": "deepseek-enhanced",
+        "repetition": 1,
+    }
 
 
 def write_source_record(path: Path) -> None:
