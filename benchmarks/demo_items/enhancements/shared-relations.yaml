@@ -1,0 +1,449 @@
+schema_version: "1.0"
+
+cases:
+  - id: repeated-read-consistency
+    name: Repeated item reads remain stable
+    tags: [enhancement, metamorphic, repeated-read]
+    setup:
+      - id: create-item
+        operation_id: createItem
+        request:
+          body:
+            name: Repeated Read Item
+            price: 10.0
+            status: active
+            category: relation-repeated-read
+        extract:
+          - variable: repeated_item_id
+            source: response.body
+            pointer: /id
+        assertions:
+          - operator: status_is
+            expected: 201
+          - operator: schema_matches
+    steps:
+      - id: first-read
+        operation_id: getItem
+        request:
+          path:
+            itemId: {$var: repeated_item_id}
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+      - id: second-read
+        operation_id: getItem
+        request:
+          path:
+            itemId: {$var: repeated_item_id}
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+    cleanup:
+      - id: delete-item
+        operation_id: deleteItem
+        request:
+          path:
+            itemId: {$var: repeated_item_id}
+        when: always
+        ignore_errors: true
+    relations:
+      - id: item-remains-stable
+        type: repeated_read_consistency
+        source_step: first-read
+        follow_up_step: second-read
+        compare_pointers: [""]
+        ignore_pointers: [/updatedAt]
+
+  - id: query-order-invariance
+    name: Query parameter order does not change list results
+    tags: [enhancement, metamorphic, query-order]
+    setup:
+      - id: create-item
+        operation_id: createItem
+        request:
+          body:
+            name: Query Order Item
+            price: 11.0
+            status: active
+            category: relation-query-order
+        extract:
+          - variable: query_item_id
+            source: response.body
+            pointer: /id
+        assertions:
+          - operator: status_is
+            expected: 201
+    steps:
+      - id: status-then-category
+        operation_id: listItems
+        request:
+          query:
+            - name: status
+              value: active
+            - name: category
+              value: relation-query-order
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+          - operator: items_unique_by
+            actual:
+              source: response.body
+              pointer: /items
+            expected: /id
+      - id: category-then-status
+        operation_id: listItems
+        request:
+          query:
+            - name: category
+              value: relation-query-order
+            - name: status
+              value: active
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+          - operator: items_unique_by
+            actual:
+              source: response.body
+              pointer: /items
+            expected: /id
+    cleanup:
+      - id: delete-item
+        operation_id: deleteItem
+        request:
+          path:
+            itemId: {$var: query_item_id}
+        when: always
+        ignore_errors: true
+    relations:
+      - id: same-item-set
+        type: query_parameter_order_invariance
+        source_step: status-then-category
+        follow_up_step: category-then-status
+        collection_pointer: /items
+        item_key_pointer: /id
+
+  - id: pagination-monotonicity
+    name: Larger pages preserve smaller-page item order
+    tags: [enhancement, metamorphic, pagination]
+    setup:
+      - id: create-first
+        operation_id: createItem
+        request:
+          body:
+            name: Pagination Item One
+            price: 21.0
+            status: active
+            category: relation-pagination
+        extract:
+          - variable: pagination_first_id
+            source: response.body
+            pointer: /id
+        assertions:
+          - operator: status_is
+            expected: 201
+      - id: create-second
+        operation_id: createItem
+        request:
+          body:
+            name: Pagination Item Two
+            price: 22.0
+            status: active
+            category: relation-pagination
+        extract:
+          - variable: pagination_second_id
+            source: response.body
+            pointer: /id
+        assertions:
+          - operator: status_is
+            expected: 201
+      - id: create-third
+        operation_id: createItem
+        request:
+          body:
+            name: Pagination Item Three
+            price: 23.0
+            status: active
+            category: relation-pagination
+        extract:
+          - variable: pagination_third_id
+            source: response.body
+            pointer: /id
+        assertions:
+          - operator: status_is
+            expected: 201
+    steps:
+      - id: small-page
+        operation_id: listItems
+        request:
+          query:
+            - name: category
+              value: relation-pagination
+            - name: offset
+              value: 0
+            - name: limit
+              value: 2
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+          - operator: items_unique_by
+            actual:
+              source: response.body
+              pointer: /items
+            expected: /id
+      - id: large-page
+        operation_id: listItems
+        request:
+          query:
+            - name: category
+              value: relation-pagination
+            - name: offset
+              value: 0
+            - name: limit
+              value: 3
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+          - operator: items_unique_by
+            actual:
+              source: response.body
+              pointer: /items
+            expected: /id
+    cleanup:
+      - id: delete-first
+        operation_id: deleteItem
+        request:
+          path:
+            itemId: {$var: pagination_first_id}
+        when: always
+        ignore_errors: true
+      - id: delete-second
+        operation_id: deleteItem
+        request:
+          path:
+            itemId: {$var: pagination_second_id}
+        when: always
+        ignore_errors: true
+      - id: delete-third
+        operation_id: deleteItem
+        request:
+          path:
+            itemId: {$var: pagination_third_id}
+        when: always
+        ignore_errors: true
+    relations:
+      - id: small-page-is-prefix
+        type: pagination_monotonicity
+        source_step: small-page
+        follow_up_step: large-page
+        collection_pointer: /items
+        item_key_pointer: /id
+        mode: prefix
+        page_size_parameter: limit
+
+  - id: create-read-consistency
+    name: Created fields are readable from the new resource
+    tags: [enhancement, lifecycle, create-read]
+    steps:
+      - id: create-item
+        operation_id: createItem
+        request:
+          body:
+            name: Create Read Item
+            price: 31.0
+            status: active
+            category: relation-create-read
+        extract:
+          - variable: created_item_id
+            source: response.body
+            pointer: /id
+        assertions:
+          - operator: status_is
+            expected: 201
+          - operator: schema_matches
+      - id: read-created
+        operation_id: getItem
+        request:
+          path:
+            itemId: {$var: created_item_id}
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+    cleanup:
+      - id: delete-item
+        operation_id: deleteItem
+        request:
+          path:
+            itemId: {$var: created_item_id}
+        when: always
+        ignore_errors: true
+    relations:
+      - id: created-fields-readable
+        type: create_read_consistency
+        source_step: create-item
+        follow_up_step: read-created
+        field_pairs:
+          - source: {location: request.body, pointer: /name}
+            follow_up: {location: response.body, pointer: /name}
+          - source: {location: request.body, pointer: /price}
+            follow_up: {location: response.body, pointer: /price}
+          - source: {location: request.body, pointer: /status}
+            follow_up: {location: response.body, pointer: /status}
+          - source: {location: request.body, pointer: /category}
+            follow_up: {location: response.body, pointer: /category}
+
+  - id: update-read-consistency
+    name: Updated fields are visible while stable fields remain unchanged
+    tags: [enhancement, lifecycle, update-read]
+    steps:
+      - id: create-item
+        operation_id: createItem
+        request:
+          body:
+            name: Before Update
+            price: 41.0
+            status: active
+            category: relation-update-read
+        extract:
+          - variable: updated_item_id
+            source: response.body
+            pointer: /id
+        assertions:
+          - operator: status_is
+            expected: 201
+      - id: update-item
+        operation_id: updateItem
+        request:
+          path:
+            itemId: {$var: updated_item_id}
+          body:
+            name: After Update
+            status: inactive
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+      - id: read-updated
+        operation_id: getItem
+        request:
+          path:
+            itemId: {$var: updated_item_id}
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+    cleanup:
+      - id: delete-item
+        operation_id: deleteItem
+        request:
+          path:
+            itemId: {$var: updated_item_id}
+        when: always
+        ignore_errors: true
+    relations:
+      - id: updated-fields-visible
+        type: update_read_consistency
+        baseline_step: create-item
+        source_step: update-item
+        follow_up_step: read-updated
+        field_pairs:
+          - source: {location: request.body, pointer: /name}
+            follow_up: {location: response.body, pointer: /name}
+          - source: {location: request.body, pointer: /status}
+            follow_up: {location: response.body, pointer: /status}
+        stable_follow_up_pointers: [/id, /createdAt, /price, /category]
+
+  - id: delete-read-consistency
+    name: Deleted resources cannot be read again
+    tags: [enhancement, lifecycle, delete-read]
+    setup:
+      - id: create-item
+        operation_id: createItem
+        request:
+          body:
+            name: Delete Read Item
+            price: 51.0
+            status: active
+            category: relation-delete-read
+        extract:
+          - variable: deleted_item_id
+            source: response.body
+            pointer: /id
+        assertions:
+          - operator: status_is
+            expected: 201
+    steps:
+      - id: delete-item
+        operation_id: deleteItem
+        request:
+          path:
+            itemId: {$var: deleted_item_id}
+        assertions:
+          - operator: status_is
+            expected: 204
+      - id: read-deleted
+        operation_id: getItem
+        request:
+          path:
+            itemId: {$var: deleted_item_id}
+        assertions:
+          - operator: status_is
+            expected: 404
+          - operator: schema_matches
+    relations:
+      - id: deleted-item-unavailable
+        type: delete_read_consistency
+        source_step: delete-item
+        follow_up_step: read-deleted
+        accepted_follow_up_statuses: [404]
+
+  - id: list-item-uniqueness
+    name: List results contain unique item identifiers
+    tags: [enhancement, invariant, list-uniqueness]
+    setup:
+      - id: create-item
+        operation_id: createItem
+        request:
+          body:
+            name: Unique List Item
+            price: 61.0
+            status: active
+            category: relation-list-uniqueness
+        extract:
+          - variable: unique_list_item_id
+            source: response.body
+            pointer: /id
+        assertions:
+          - operator: status_is
+            expected: 201
+    steps:
+      - id: list-items
+        operation_id: listItems
+        request:
+          query:
+            - name: category
+              value: relation-list-uniqueness
+        assertions:
+          - operator: status_is
+            expected: 200
+          - operator: schema_matches
+          - operator: items_unique_by
+            actual:
+              source: response.body
+              pointer: /items
+            expected: /id
+    cleanup:
+      - id: delete-item
+        operation_id: deleteItem
+        request:
+          path:
+            itemId: {$var: unique_list_item_id}
+        when: always
+        ignore_errors: true
+
