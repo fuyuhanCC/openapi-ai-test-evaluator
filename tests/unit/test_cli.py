@@ -7,6 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from openapi_ai_test_evaluator.cli.app import app
+from openapi_ai_test_evaluator.domain import SuiteCompositionRecord
 from openapi_ai_test_evaluator.domain.execution import (
     ExecutionOutcome,
     FaultObservation,
@@ -16,7 +17,8 @@ from openapi_ai_test_evaluator.domain.execution import (
     StepResult,
 )
 from openapi_ai_test_evaluator.domain.execution import TestCaseResult as CaseResult
-from openapi_ai_test_evaluator.generation import DeepSeekProvider
+from openapi_ai_test_evaluator.generation import DeepSeekProvider, case_batch_sha256
+from openapi_ai_test_evaluator.validation import load_test_case_batch
 
 ROOT = Path(__file__).parents[2]
 runner = CliRunner()
@@ -418,6 +420,120 @@ def test_cases_validate_reports_counts() -> None:
         "steps": 1,
         "relations": 0,
     }
+
+
+def test_cases_compose_writes_merged_batch_and_provenance_record(tmp_path: Path) -> None:
+    base_path = ROOT / "examples" / "cases" / "minimal-get.yaml"
+    enhancement_path = (
+        ROOT / "benchmarks" / "demo_items" / "enhancements" / "shared-relations.yaml"
+    )
+    cases_output = tmp_path / "cases" / "augmented.json"
+    record_output = tmp_path / "compositions" / "augmented.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "cases",
+            "compose",
+            "--base-cases",
+            str(base_path),
+            "--enhancement-cases",
+            str(enhancement_path),
+            "--pack-id",
+            "shared-relations",
+            "--composition-id",
+            "demo-augmented-r1",
+            "--cases-output",
+            str(cases_output),
+            "--record-output",
+            str(record_output),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == {
+        "status": "succeeded",
+        "composition_id": "demo-augmented-r1",
+        "base_cases": 1,
+        "enhancement_cases": 7,
+        "composed_cases": 8,
+        "cases_output": str(cases_output),
+        "record_output": str(record_output),
+    }
+    composed_batch = load_test_case_batch(cases_output)
+    record = SuiteCompositionRecord.model_validate_json(record_output.read_text())
+    assert len(composed_batch.cases) == 8
+    assert record.composed_batch.sha256 == case_batch_sha256(composed_batch)
+
+
+def test_cases_compose_requires_one_pack_id_per_enhancement(tmp_path: Path) -> None:
+    base_path = ROOT / "examples" / "cases" / "minimal-get.yaml"
+    enhancement_path = (
+        ROOT / "benchmarks" / "demo_items" / "enhancements" / "shared-relations.yaml"
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "cases",
+            "compose",
+            "--base-cases",
+            str(base_path),
+            "--enhancement-cases",
+            str(enhancement_path),
+            "--enhancement-cases",
+            str(enhancement_path),
+            "--pack-id",
+            "shared-relations",
+            "--composition-id",
+            "demo-augmented-r1",
+            "--cases-output",
+            str(tmp_path / "cases.json"),
+            "--record-output",
+            str(tmp_path / "record.json"),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["stage"] == "config"
+
+
+def test_cases_compose_refuses_to_overwrite_existing_outputs(tmp_path: Path) -> None:
+    base_path = ROOT / "examples" / "cases" / "minimal-get.yaml"
+    enhancement_path = (
+        ROOT / "benchmarks" / "demo_items" / "enhancements" / "shared-relations.yaml"
+    )
+    cases_output = tmp_path / "cases.json"
+    record_output = tmp_path / "record.json"
+    cases_output.write_text("keep-me", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "cases",
+            "compose",
+            "--base-cases",
+            str(base_path),
+            "--enhancement-cases",
+            str(enhancement_path),
+            "--pack-id",
+            "shared-relations",
+            "--composition-id",
+            "demo-augmented-r1",
+            "--cases-output",
+            str(cases_output),
+            "--record-output",
+            str(record_output),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["stage"] == "artifacts"
+    assert cases_output.read_text(encoding="utf-8") == "keep-me"
+    assert not record_output.exists()
 
 
 def test_cases_validate_reports_readable_text_counts() -> None:

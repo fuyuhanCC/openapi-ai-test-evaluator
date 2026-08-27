@@ -145,6 +145,24 @@ eligible requests into the common `TestCaseBatch` and records every rejected
 case category in an `AdaptationRecord`. HTTP requests are sent only later
 through `oate cases run`.
 
+Compose either native generator batch with the same shared enhancement pack:
+
+```bash
+uv run oate cases compose \
+  --base-cases artifacts/cases/deepseek-demo-001.json \
+  --enhancement-cases benchmarks/demo_items/enhancements/shared-relations.yaml \
+  --pack-id shared-relations \
+  --composition-id deepseek-demo-001-enhanced \
+  --cases-output artifacts/cases/deepseek-demo-001-enhanced.json \
+  --record-output artifacts/compositions/deepseek-demo-001-enhanced.json
+```
+
+The command performs no model or HTTP calls. It rejects duplicate case IDs and
+writes a `SuiteCompositionRecord` containing native, enhancement, and composed
+case counts plus canonical SHA-256 values. Run the same command with the
+Schemathesis batch to build the paired enhanced arm from identical shared
+cases.
+
 Start the Demo Items SUT and fault proxy in two separate terminals:
 
 ```bash

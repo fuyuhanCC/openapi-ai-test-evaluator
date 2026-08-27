@@ -1,5 +1,12 @@
 """Provider-independent test-case generation boundaries."""
 
+from openapi_ai_test_evaluator.generation.batch_composer import (
+    ComposedTestCaseBatch,
+    NamedEnhancementBatch,
+    SuiteCompositionError,
+    case_batch_sha256,
+    compose_test_case_batches,
+)
 from openapi_ai_test_evaluator.generation.case_admission import (
     GeneratedCaseAdmission,
     ProviderOutputAdmissionError,
@@ -62,6 +69,7 @@ __all__ = [
     "CapturedGenerationMode",
     "CapturedPhase",
     "CapturedSchemathesisCase",
+    "ComposedTestCaseBatch",
     "DeepSeekProvider",
     "DeepSeekProviderConfigError",
     "FakeProvider",
@@ -69,6 +77,7 @@ __all__ = [
     "GeneratedCaseAdmission",
     "LLMProvider",
     "LLMProviderError",
+    "NamedEnhancementBatch",
     "ProviderRequest",
     "ProviderResponse",
     "ProviderOutputAdmissionError",
@@ -76,6 +85,7 @@ __all__ = [
     "RejectedSchemathesisCase",
     "SCHEMATHESIS_ADAPTER_VERSION",
     "SUPPORTED_PROMPT_VERSIONS",
+    "SuiteCompositionError",
     "SchemathesisCaseAdaptation",
     "SchemathesisCaseCapture",
     "SchemathesisGenerationConfig",
@@ -87,6 +97,8 @@ __all__ = [
     "build_openapi_context",
     "build_provider_request",
     "capture_schemathesis_case",
+    "case_batch_sha256",
+    "compose_test_case_batches",
     "generate_cases_from_openapi",
     "generate_schemathesis_batch",
     "generate_test_case_batch",

@@ -36,8 +36,11 @@ from openapi_ai_test_evaluator.generation import (
     PROMPT_VERSION,
     DeepSeekProvider,
     DeepSeekProviderConfigError,
+    NamedEnhancementBatch,
     PromptBuildError,
     SchemathesisGenerationConfig,
+    SuiteCompositionError,
+    compose_test_case_batches,
     generate_cases_from_openapi,
     generate_schemathesis_batch,
 )
@@ -66,7 +69,7 @@ app = typer.Typer(
 )
 plan_app = typer.Typer(help="Inspect and validate TestPlan documents.", no_args_is_help=True)
 cases_app = typer.Typer(
-    help="Validate and run provider-independent TestCaseBatch documents.",
+    help="Compose, validate, and run provider-independent TestCaseBatch documents.",
     no_args_is_help=True,
 )
 report_app = typer.Typer(
@@ -822,6 +825,164 @@ def _emit_baseline_summary(summary: dict[str, object], json_output: bool) -> Non
         + (f", {summary['cases_output']}" if "cases_output" in summary else ""),
         err=summary["status"] != "succeeded",
     )
+
+
+@cases_app.command("compose")
+def compose_cases(
+    base_cases: Annotated[
+        Path,
+        typer.Option(
+            "--base-cases",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ],
+    enhancement_cases: Annotated[
+        list[Path],
+        typer.Option(
+            "--enhancement-cases",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            help="Enhancement TestCaseBatch; repeat with one matching --pack-id.",
+        ),
+    ],
+    pack_ids: Annotated[
+        list[str],
+        typer.Option("--pack-id", help="Stable enhancement-pack ID; repeat in input order."),
+    ],
+    composition_id: Annotated[
+        str,
+        typer.Option("--composition-id", help="Stable ID for this composed suite."),
+    ],
+    cases_output: Annotated[
+        Path,
+        typer.Option("--cases-output", file_okay=True, dir_okay=False),
+    ],
+    record_output: Annotated[
+        Path,
+        typer.Option("--record-output", file_okay=True, dir_okay=False),
+    ],
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Allow replacing existing composition artifacts."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit a machine-readable composition summary."),
+    ] = False,
+) -> None:
+    """Compose native cases with named shared enhancements without executing HTTP."""
+    input_paths = [base_cases, *enhancement_cases]
+    _prepare_composition_outputs(
+        input_paths,
+        cases_output,
+        record_output,
+        overwrite,
+        json_output,
+    )
+    if not enhancement_cases or len(enhancement_cases) != len(pack_ids):
+        _report_composition_error(
+            "config",
+            ValueError("provide one --pack-id for every --enhancement-cases input"),
+            json_output,
+        )
+
+    try:
+        base_batch = load_test_case_batch(base_cases)
+        named_enhancements = [
+            NamedEnhancementBatch(pack_id, load_test_case_batch(path))
+            for pack_id, path in zip(pack_ids, enhancement_cases, strict=True)
+        ]
+    except TestCaseBatchLoadError as error:
+        _report_composition_error("cases", error, json_output)
+
+    try:
+        composed = compose_test_case_batches(
+            base_batch,
+            named_enhancements,
+            composition_id=composition_id,
+        )
+    except (SuiteCompositionError, ValidationError) as error:
+        _report_composition_error("composition", error, json_output)
+
+    try:
+        cases_output.write_text(composed.batch.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        record_output.write_text(composed.record.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    except OSError as error:
+        _report_composition_error("artifacts", error, json_output)
+
+    enhancement_count = sum(
+        enhancement.batch.case_count for enhancement in composed.record.enhancements
+    )
+    summary = {
+        "status": "succeeded",
+        "composition_id": composed.record.composition_id,
+        "base_cases": composed.record.base_batch.case_count,
+        "enhancement_cases": enhancement_count,
+        "composed_cases": composed.record.composed_batch.case_count,
+        "cases_output": str(cases_output),
+        "record_output": str(record_output),
+    }
+    if json_output:
+        typer.echo(json.dumps(summary))
+    else:
+        typer.echo(
+            f"Composition {summary['composition_id']}: succeeded "
+            f"({summary['base_cases']} native + {summary['enhancement_cases']} enhancement "
+            f"= {summary['composed_cases']} cases); wrote {cases_output}, {record_output}"
+        )
+
+
+def _prepare_composition_outputs(
+    input_paths: list[Path],
+    cases_output: Path,
+    record_output: Path,
+    overwrite: bool,
+    json_output: bool,
+) -> None:
+    outputs = (cases_output, record_output)
+    resolved_outputs = {path.resolve() for path in outputs}
+    if len(resolved_outputs) != len(outputs):
+        _report_composition_error(
+            "artifacts",
+            ValueError("cases-output and record-output must be different files"),
+            json_output,
+        )
+    if resolved_outputs & {path.resolve() for path in input_paths}:
+        _report_composition_error(
+            "artifacts",
+            ValueError("composition outputs cannot overwrite input case files"),
+            json_output,
+        )
+    existing = [path for path in outputs if path.exists()]
+    if existing and not overwrite:
+        paths = ", ".join(str(path) for path in existing)
+        _report_composition_error(
+            "artifacts",
+            ValueError(f"refusing to overwrite existing artifacts: {paths}"),
+            json_output,
+        )
+    try:
+        for path in outputs:
+            path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        _report_composition_error("artifacts", error, json_output)
+
+
+def _report_composition_error(
+    stage: str,
+    error: Exception,
+    json_output: bool,
+) -> NoReturn:
+    if json_output:
+        typer.echo(json.dumps({"status": "not_started", "stage": stage, "error": str(error)}))
+    else:
+        typer.echo(f"Cannot compose TestCaseBatch ({stage}): {error}", err=True)
+    raise typer.Exit(code=1)
 
 
 @cases_app.command("validate")
