@@ -177,3 +177,26 @@ def test_rejects_invalid_operator_specific_expected_values(
                 "expected": expected,
             }
         )
+
+
+@pytest.mark.parametrize("expected", [None, 1, "id", "/bad~pointer"])
+def test_rejects_invalid_collection_uniqueness_key_pointer(expected: object) -> None:
+    with pytest.raises(ValidationError, match="JSON Pointer expected value"):
+        Assertion.model_validate(
+            {
+                "operator": "items_unique_by",
+                "actual": {"source": "response.body", "pointer": "/items"},
+                "expected": expected,
+            }
+        )
+
+
+def test_collection_uniqueness_requires_a_response_body_selector() -> None:
+    with pytest.raises(ValidationError, match="response.body selector"):
+        Assertion.model_validate(
+            {
+                "operator": "items_unique_by",
+                "actual": {"source": "response.headers", "pointer": "/x-items"},
+                "expected": "/id",
+            }
+        )

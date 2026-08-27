@@ -22,6 +22,7 @@ from openapi_ai_test_evaluator.execution.response_processor import ProcessedResp
 from openapi_ai_test_evaluator.execution.response_selection import (
     ResponseSelectionError,
     response_pointer_is_sensitive,
+    select_json_pointer_value,
     select_response_value,
 )
 from openapi_ai_test_evaluator.execution.snapshots import (
@@ -174,6 +175,12 @@ def _evaluate_predicate(
         if not isinstance(actual, (str, list, dict)):
             raise _AssertionEvaluationError("length_is actual value has no supported length")
         return len(actual) == expected
+    if operator is AssertionOperator.ITEMS_UNIQUE_BY:
+        if not isinstance(expected, str):
+            raise _AssertionEvaluationError(
+                "items_unique_by expected value is not a JSON Pointer"
+            )
+        return _items_are_unique_by(actual, expected)
     if operator is AssertionOperator.GREATER_THAN:
         if not _is_number(expected):
             raise _AssertionEvaluationError("greater_than expected value is not numeric")
@@ -192,6 +199,27 @@ def _evaluate_predicate(
                 "matches_pattern expected value is not a valid regular expression"
             ) from error
     raise _AssertionEvaluationError(f"unsupported assertion operator {operator.value!r}")
+
+
+def _items_are_unique_by(actual: JsonValue, item_pointer: str) -> bool:
+    if not isinstance(actual, list):
+        raise _AssertionEvaluationError("items_unique_by actual value is not an array")
+
+    keys: list[JsonValue] = []
+    for index, item in enumerate(actual):
+        try:
+            selection = select_json_pointer_value(item, item_pointer)
+        except ResponseSelectionError as error:
+            raise _AssertionEvaluationError(str(error)) from error
+        if not selection.found:
+            raise _AssertionEvaluationError(
+                f"items_unique_by key is missing from item at index {index}"
+            )
+        key = cast(JsonValue, selection.value)
+        if any(_json_equal(key, existing) for existing in keys):
+            return False
+        keys.append(key)
+    return True
 
 
 def _contains(actual: JsonValue, expected: JsonValue | None) -> bool:

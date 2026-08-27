@@ -408,6 +408,16 @@ def _pointer_exists_in_any_schema(
     return any(schema_at_pointer(schema, pointer, spec.document) is not None for schema in schemas)
 
 
+def _item_pointer_exists_in_any_schema(
+    schemas: list[SchemaDefinition],
+    collection_pointer: str,
+    item_pointer: str,
+    spec: OpenAPISpec,
+) -> bool:
+    combined_pointer = f"{collection_pointer}/0{item_pointer}"
+    return _pointer_exists_in_any_schema(schemas, combined_pointer, spec)
+
+
 def _validate_response_contract(
     step: RequestStep,
     operation: OperationModel,
@@ -440,12 +450,34 @@ def _validate_response_contract(
             )
         if assertion.actual is not None and assertion.actual.source == "response.body":
             pointer = assertion.actual.pointer or ""
-            if not _pointer_exists_in_any_schema(schemas, pointer, spec):
+            pointer_exists = _pointer_exists_in_any_schema(schemas, pointer, spec)
+            if not pointer_exists:
                 issues.append(
                     _issue(
                         "unknown_response_pointer",
                         f"{assertion_path}.actual.pointer",
                         f"response pointer {pointer!r} is absent from the expected response schema",
+                    )
+                )
+            if (
+                pointer_exists
+                and assertion.operator is AssertionOperator.ITEMS_UNIQUE_BY
+                and isinstance(assertion.expected, str)
+                and not _item_pointer_exists_in_any_schema(
+                    schemas,
+                    pointer,
+                    assertion.expected,
+                    spec,
+                )
+            ):
+                issues.append(
+                    _issue(
+                        "unknown_collection_item_pointer",
+                        f"{assertion_path}.expected",
+                        (
+                            f"item pointer {assertion.expected!r} is absent from the array "
+                            f"at response pointer {pointer!r}"
+                        ),
                     )
                 )
 

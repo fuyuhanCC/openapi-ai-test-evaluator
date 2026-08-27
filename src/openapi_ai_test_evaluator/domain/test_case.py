@@ -47,6 +47,7 @@ class AssertionOperator(StrEnum):
     EXISTS = "exists"
     CONTAINS = "contains"
     LENGTH_IS = "length_is"
+    ITEMS_UNIQUE_BY = "items_unique_by"
     GREATER_THAN = "greater_than"
     MATCHES_PATTERN = "matches_pattern"
 
@@ -230,6 +231,17 @@ class Assertion(ContractModel):
                 raise ValueError("exists requires an actual selector")
             if self.expected is not None:
                 raise ValueError("exists does not accept an expected value")
+        elif self.operator is AssertionOperator.ITEMS_UNIQUE_BY:
+            if self.actual is None or self.actual.source != "response.body":
+                raise ValueError("items_unique_by requires a response.body selector")
+            valid_pointer = (
+                expected_provided
+                and isinstance(self.expected, str)
+                and (self.expected == "" or self.expected.startswith("/"))
+                and re.search(r"~(?![01])", self.expected) is None
+            )
+            if not valid_pointer:
+                raise ValueError("items_unique_by requires a JSON Pointer expected value")
         else:
             if self.actual is None or not expected_provided:
                 raise ValueError(f"{self.operator.value} requires actual and expected")

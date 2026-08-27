@@ -154,6 +154,42 @@ def test_reports_undeclared_response_status_inside_status_set() -> None:
     assert "418" in undeclared[0].message
 
 
+def test_accepts_collection_uniqueness_for_declared_item_key() -> None:
+    plan_data = _minimal_plan_data()
+    step = _first_step(plan_data)
+    step["operation_id"] = "listItems"
+    step["assertions"] = [
+        {"operator": "status_is", "expected": 200},
+        {
+            "operator": "items_unique_by",
+            "actual": {"source": "response.body", "pointer": "/items"},
+            "expected": "/id",
+        },
+    ]
+
+    issues = validate_plan_semantics(PlanModel.model_validate(plan_data), SPEC)
+
+    assert issues == []
+
+
+def test_reports_unknown_collection_item_key_pointer() -> None:
+    plan_data = _minimal_plan_data()
+    step = _first_step(plan_data)
+    step["operation_id"] = "listItems"
+    step["assertions"] = [
+        {"operator": "status_is", "expected": 200},
+        {
+            "operator": "items_unique_by",
+            "actual": {"source": "response.body", "pointer": "/items"},
+            "expected": "/missing",
+        },
+    ]
+
+    issues = validate_plan_semantics(PlanModel.model_validate(plan_data), SPEC)
+
+    assert [issue.code for issue in issues] == ["unknown_collection_item_pointer"]
+
+
 def test_reports_conformant_request_schema_violation() -> None:
     plan_data = deepcopy(load_test_plan(PLAN_DIR / "all-methods.yaml").model_dump(mode="json"))
     create_step = _first_step(plan_data)

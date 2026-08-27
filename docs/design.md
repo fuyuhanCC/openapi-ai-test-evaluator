@@ -317,12 +317,14 @@ runner to isolate state even when a primary step fails.
 V1 assertions are limited to these operators:
 
 - `status_is`
+- `status_in`
 - `schema_matches`
 - `equals`
 - `not_equals`
 - `exists`
 - `contains`
 - `length_is`
+- `items_unique_by`
 - `greater_than`
 - `matches_pattern`
 
@@ -337,6 +339,12 @@ may contain the same declarative `$var` references used by requests.
 membership, and partial-object matching inside arrays. This lets a stateful
 test case verify that a collection contains the resource identifier extracted
 from an earlier response without copying every returned field into the batch.
+
+`items_unique_by` selects a response-body array and uses its expected JSON
+Pointer relative to each item as a stable key. Duplicate keys fail the
+assertion; a non-array selection or an item without the configured key is an
+evaluation error. This expresses collection uniqueness without relying on a
+known collection length.
 
 Unknown operations, extractors, or assertion operators make a batch invalid.
 

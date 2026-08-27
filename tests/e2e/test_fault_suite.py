@@ -80,6 +80,14 @@ BATCH = CaseBatch.model_validate(
                         "assertions": [
                             {"operator": "status_is", "expected": 200},
                             {"operator": "schema_matches"},
+                            {
+                                "operator": "items_unique_by",
+                                "actual": {
+                                    "source": "response.body",
+                                    "pointer": "/items",
+                                },
+                                "expected": "/id",
+                            },
                         ],
                     },
                 ],
@@ -163,11 +171,11 @@ def test_runs_one_frozen_batch_through_clean_and_all_fault_states() -> None:
         "get-id-as-string": ExecutionOutcome.FAILED,
         "get-missing-name": ExecutionOutcome.FAILED,
         "get-status-error": ExecutionOutcome.FAILED,
-        "list-duplicate-first-item": ExecutionOutcome.PASSED,
+        "list-duplicate-first-item": ExecutionOutcome.FAILED,
     }
-    assert evaluation.fault_summary.detected_fault_count == 3
-    assert evaluation.fault_summary.not_detected_fault_count == 1
-    assert evaluation.fault_summary.fault_detection_rate == 0.75
+    assert evaluation.fault_summary.detected_fault_count == 4
+    assert evaluation.fault_summary.not_detected_fault_count == 0
+    assert evaluation.fault_summary.fault_detection_rate == 1.0
     assert evaluation.execution.operation_coverage_rate == 0.5
     assert evaluation.execution.clean_request_count == 4
     assert evaluation.execution.fault_request_count == 16

@@ -157,6 +157,61 @@ def test_executes_remaining_value_operators() -> None:
     assert all(result.outcome is ExecutionOutcome.PASSED for result in results)
 
 
+def test_checks_that_collection_item_keys_are_unique() -> None:
+    plan_assertion = assertion(
+        operator="items_unique_by",
+        actual={"source": "response.body", "pointer": "/items"},
+        expected="/id",
+    )
+
+    passed = execute_assertions(
+        [plan_assertion],
+        processed_response({"items": [{"id": 1}, {"id": 2}]}),
+        {},
+    )[0]
+    failed = execute_assertions(
+        [plan_assertion],
+        processed_response({"items": [{"id": 1}, {"id": 1}]}),
+        {},
+    )[0]
+
+    assert passed.outcome is ExecutionOutcome.PASSED
+    assert failed.outcome is ExecutionOutcome.FAILED
+    assert failed.message == "items_unique_by assertion failed"
+
+
+def test_collection_uniqueness_errors_for_missing_item_key() -> None:
+    plan_assertion = assertion(
+        operator="items_unique_by",
+        actual={"source": "response.body", "pointer": "/items"},
+        expected="/id",
+    )
+
+    result = execute_assertions(
+        [plan_assertion],
+        processed_response({"items": [{"name": "missing id"}]}),
+        {},
+    )[0]
+
+    assert result.outcome is ExecutionOutcome.ERROR
+    assert result.message == "items_unique_by key is missing from item at index 0"
+
+
+def test_collection_uniqueness_errors_when_selected_value_is_not_an_array() -> None:
+    plan_assertion = assertion(
+        operator="items_unique_by",
+        actual={"source": "response.body", "pointer": "/items"},
+        expected="/id",
+    )
+
+    result = execute_assertions(
+        [plan_assertion], processed_response({"items": {"id": 1}}), {}
+    )[0]
+
+    assert result.outcome is ExecutionOutcome.ERROR
+    assert result.message == "items_unique_by actual value is not an array"
+
+
 def test_selects_headers_case_insensitively_and_preserves_repeated_values() -> None:
     assertions = [
         assertion(
