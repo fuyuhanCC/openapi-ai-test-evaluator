@@ -453,7 +453,7 @@ def generate_cases(
     max_output_tokens: Annotated[
         int,
         typer.Option("--max-output-tokens", help="Maximum generated tokens."),
-    ] = 4096,
+    ] = 8192,
     timeout_ms: Annotated[
         int,
         typer.Option("--timeout-ms", help="Provider request timeout in milliseconds."),

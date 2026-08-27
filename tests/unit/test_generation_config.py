@@ -13,7 +13,7 @@ def test_generation_config_has_reproducible_defaults() -> None:
     assert config.max_cases == 20
     assert config.max_steps_per_case == 5
     assert config.temperature == 0.0
-    assert config.max_output_tokens == 4096
+    assert config.max_output_tokens == 8192
     assert config.timeout_ms == 60_000
     assert config.seed is None
 

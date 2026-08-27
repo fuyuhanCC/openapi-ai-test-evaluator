@@ -23,7 +23,7 @@ class GenerationConfig(ContractModel):
     max_cases: int = Field(default=20, ge=1, le=100)
     max_steps_per_case: int = Field(default=5, ge=1, le=20)
     temperature: float = Field(default=0.0, ge=0.0, le=2.0, allow_inf_nan=False)
-    max_output_tokens: int = Field(default=4096, ge=1)
+    max_output_tokens: int = Field(default=8192, ge=1)
     timeout_ms: int = Field(default=60_000, ge=1, le=300_000)
     seed: int | None = None
 

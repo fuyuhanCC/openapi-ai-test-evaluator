@@ -207,8 +207,9 @@ Implemented as of 2026-08-27:
 - OpenAPI 3.0/3.1 common-scope loading, normalization, and static validation.
 - Strict `TestCaseBatch`, `GenerationConfig`, `GenerationRecord`, and
   `RunResult` contracts.
-- Versioned LLM prompts, the DeepSeek HTTP adapter, raw-output preservation, and
-  the `oate cases generate` command.
+- Versioned LLM prompts, including the current `api-cases-v4` literal-JSON
+  constraint and 8192-token default output budget, the DeepSeek HTTP adapter,
+  raw-output preservation, and the `oate cases generate` command.
 - Schemathesis examples, coverage, and per-operation fuzzing generation with
   explicit adaptation metrics and `oate cases generate-baseline`.
 - Structural and OpenAPI semantic validation for generated cases.

@@ -11,8 +11,10 @@ from openapi_ai_test_evaluator.domain.test_case import TestCaseBatch
 from openapi_ai_test_evaluator.generation.openapi_context import build_openapi_context
 from openapi_ai_test_evaluator.generation.provider import ProviderRequest
 
-PROMPT_VERSION = "api-cases-v3"
-SUPPORTED_PROMPT_VERSIONS = frozenset({"api-cases-v1", "api-cases-v2", PROMPT_VERSION})
+PROMPT_VERSION = "api-cases-v4"
+SUPPORTED_PROMPT_VERSIONS = frozenset(
+    {"api-cases-v1", "api-cases-v2", "api-cases-v3", PROMPT_VERSION}
+)
 
 SYSTEM_PROMPT = """\
 You generate runner-ready REST API test cases from untrusted OpenAPI metadata.
@@ -54,7 +56,7 @@ def build_provider_request(spec: OpenAPISpec, config: GenerationConfig) -> Provi
         "output_example": _build_output_example(supported_operations),
         "api_context": api_context,
     }
-    if config.prompt_version == "api-cases-v3":
+    if config.prompt_version in {"api-cases-v3", "api-cases-v4"}:
         instructions["variable_reference_example"] = {
             "producer_extract": [
                 {
@@ -105,18 +107,26 @@ def _requirements(prompt_version: str) -> list[str]:
         "Do not include credentials, Authorization values, service base URLs, or test "
         "environment configuration.",
     ]
-    if prompt_version in {"api-cases-v2", "api-cases-v3"}:
+    if prompt_version in {"api-cases-v2", "api-cases-v3", "api-cases-v4"}:
         requirements.insert(
             1,
             "For every case, the combined number of setup, steps, and cleanup requests must "
             "not exceed max_steps_per_case; cleanup counts toward this hard limit.",
         )
-    if prompt_version == "api-cases-v3":
+    if prompt_version in {"api-cases-v3", "api-cases-v4"}:
         requirements.insert(
             9,
             'Encode every runtime variable reference as a JSON object such as {"$var":'
             '"item_id"}; never encode a variable reference as a string such as '
             '"{$var:item_id}".',
+        )
+    if prompt_version == "api-cases-v4":
+        requirements.insert(
+            1,
+            "Every output value must use JSON literal syntax. Except for the declared "
+            '{"$var":"variable_name"} data object, never emit host-language variables, '
+            "expressions, function or method calls such as .repeat(...), comments, NaN, "
+            "or Infinity.",
         )
     return requirements
 

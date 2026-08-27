@@ -89,13 +89,30 @@ def test_latest_prompt_demonstrates_object_variable_references() -> None:
     )
 
 
+def test_latest_prompt_requires_literal_json_without_expressions() -> None:
+    request = build_provider_request(load_openapi(DEMO_SPEC), config())
+    requirements = json.loads(request.user_prompt)["requirements"]
+
+    literal_rule = next(
+        requirement for requirement in requirements if "JSON literal syntax" in requirement
+    )
+    assert ".repeat(...)" in literal_rule
+    assert "function or method calls" in literal_rule
+    assert '{"$var":"variable_name"}' in literal_rule
+
+
 @pytest.mark.parametrize(
-    ("prompt_version", "has_step_rule"),
-    [("api-cases-v1", False), ("api-cases-v2", True)],
+    ("prompt_version", "has_step_rule", "has_variable_rule"),
+    [
+        ("api-cases-v1", False, False),
+        ("api-cases-v2", True, False),
+        ("api-cases-v3", True, True),
+    ],
 )
 def test_previous_prompt_versions_remain_reproducible(
     prompt_version: str,
     has_step_rule: bool,
+    has_variable_rule: bool,
 ) -> None:
     request = build_provider_request(
         load_openapi(DEMO_SPEC),
@@ -110,11 +127,15 @@ def test_previous_prompt_versions_remain_reproducible(
         )
         is has_step_rule
     )
-    assert "variable_reference_example" not in instructions
-    assert all(
-        "never encode a variable reference as a string" not in item
-        for item in instructions["requirements"]
+    assert ("variable_reference_example" in instructions) is has_variable_rule
+    assert (
+        any(
+            "never encode a variable reference as a string" in item
+            for item in instructions["requirements"]
+        )
+        is has_variable_rule
     )
+    assert all("JSON literal syntax" not in item for item in instructions["requirements"])
 
 
 def test_prompt_contains_real_operations_and_omits_server_address() -> None:
