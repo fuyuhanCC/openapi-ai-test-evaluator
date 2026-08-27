@@ -36,6 +36,14 @@ def test_inherits_path_parameters_and_resolves_response_references() -> None:
     assert operation.responses["404"].schema_definition == {"$ref": "#/components/schemas/Error"}
 
 
+def test_demo_contract_declares_validation_errors_for_parameterized_operations() -> None:
+    spec = load_openapi(DEMO_SPEC)
+
+    for operation_id in ("listItems", "getItem", "replaceItem", "updateItem", "deleteItem"):
+        response = spec.operations[operation_id].responses["400"]
+        assert response.schema_definition == {"$ref": "#/components/schemas/Error"}
+
+
 def test_loads_openapi_31_and_preserves_its_schema(tmp_path: Path) -> None:
     spec_path = tmp_path / "openapi.yaml"
     spec_path.write_text(

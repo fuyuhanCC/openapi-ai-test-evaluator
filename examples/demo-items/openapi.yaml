@@ -49,6 +49,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ItemList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
     post:
       operationId: createItem
       summary: Create an item
@@ -86,6 +88,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Item"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
     put:
@@ -134,6 +138,8 @@ paths:
       responses:
         "204":
           description: Item deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
 

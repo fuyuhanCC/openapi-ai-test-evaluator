@@ -21,6 +21,13 @@ from openapi_ai_test_evaluator.validation import detect_request_violations
 
 _JSON_VALUE_ADAPTER = TypeAdapter(JsonValue)
 
+# Preserve the intersection of Schemathesis' default status-oriented checks:
+# status-code conformance, positive/negative data handling, and server-error rejection.
+# A schema-valid request may still reference an unavailable or conflicting resource,
+# while an intentionally invalid request must be rejected with a recognized 4xx status.
+_POSITIVE_NON_SUCCESS_STATUSES = frozenset({401, 403, 404, 409})
+_NEGATIVE_REJECTION_STATUSES = frozenset({400, 401, 403, 404, 405, 406, 409, 422, 428})
+
 
 class CapturedGenerationMode(StrEnum):
     POSITIVE = "positive"
@@ -294,15 +301,15 @@ def _expected_statuses(
     operation: OperationModel,
     mode: CapturedGenerationMode,
 ) -> tuple[int, ...]:
+    def accepted(status: int) -> bool:
+        if mode is CapturedGenerationMode.POSITIVE:
+            return 200 <= status < 300 or status in _POSITIVE_NON_SUCCESS_STATUSES
+        return status in _NEGATIVE_REJECTION_STATUSES
+
     statuses = sorted(
         int(status)
         for status in operation.responses
-        if status.isdigit()
-        and (
-            200 <= int(status) < 300
-            if mode is CapturedGenerationMode.POSITIVE
-            else 400 <= int(status) < 500
-        )
+        if status.isdigit() and accepted(int(status))
     )
     return tuple(statuses)
 

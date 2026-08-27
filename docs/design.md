@@ -664,7 +664,9 @@ between conventional and LLM-based generation.
 
 The primary native-suite experiment adapts eligible Schemathesis-generated
 requests into `TestCaseBatch` so they receive the same semantic checks, runner,
-deterministic oracles, fault set, and result format as LLM cases. It executes all
+assertion engine, fault set, and result format as LLM cases. Generator-native
+status oracles are preserved rather than replaced with one artificial shared
+status. It executes all
 admitted cases from both generators rather than imposing a shared HTTP request
 limit. Different suite sizes are explicit measurements, not silently normalized
 away, and efficiency is additionally reported per 100 requests.
@@ -675,6 +677,14 @@ frozen per OpenAPI operation together with the Schemathesis version and seed.
 Concrete negative requests must declare the contract violations detected by the
 common semantic validator before they become executable `intentionally_invalid`
 cases.
+
+For the pinned Schemathesis baseline, the adapter mirrors the intersection of
+its default status checks. Positive requests accept a declared `2xx` response
+or a declared resource/auth/conflict response (`401`, `403`, `404`, `409`);
+negative requests accept a declared rejection response (`400`, `401`, `403`,
+`404`, `405`, `406`, `409`, `422`, `428`). A `5xx` response is never treated as
+a passing oracle. Response bodies are still validated against the OpenAPI
+schema selected by the actual status code.
 
 Schemathesis-native stateful workflows or future modes that cannot be normalized
 without changing their semantics may be run as a labeled secondary external

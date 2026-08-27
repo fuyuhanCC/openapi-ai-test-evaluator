@@ -72,6 +72,26 @@ def test_adapts_a_positive_json_request_to_one_runner_step() -> None:
     ) == []
 
 
+def test_positive_resource_request_accepts_success_or_not_found() -> None:
+    adaptation = adapt_schemathesis_case(
+        captured_case(
+            operation_id="getItem",
+            method="GET",
+            path="/items/{itemId}",
+            body_present=False,
+            body=None,
+            media_type=None,
+            path_parameters=(("itemId", 999),),
+        ),
+        SPEC,
+    )
+
+    assert adaptation.case is not None
+    assertion = adaptation.case.steps[0].assertions[0]
+    assert assertion.operator is AssertionOperator.STATUS_IN
+    assert assertion.expected == [200, 404]
+
+
 def test_adapts_a_negative_request_with_inferred_violations_and_status_set() -> None:
     adaptation = adapt_schemathesis_case(
         captured_case(
@@ -178,6 +198,9 @@ def test_preserves_semantic_blocker_code_for_adapter_metrics() -> None:
 
 
 def test_rejects_negative_case_without_a_declared_status_oracle() -> None:
+    spec_without_bad_request = SPEC.model_copy(deep=True)
+    spec_without_bad_request.operations["listItems"].responses.pop("400")
+
     adaptation = adapt_schemathesis_case(
         captured_case(
             operation_id="listItems",
@@ -189,7 +212,7 @@ def test_rejects_negative_case_without_a_declared_status_oracle() -> None:
             media_type=None,
             query=(("limit", 0),),
         ),
-        SPEC,
+        spec_without_bad_request,
     )
 
     assert rejection_code(adaptation) is AdaptationRejectionCode.STATUS_ORACLE_UNAVAILABLE
