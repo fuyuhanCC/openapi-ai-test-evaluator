@@ -124,12 +124,15 @@ generation-limit, and OpenAPI semantic validation; rejected cases remain in the
 raw output and are counted with stable reasons in `GenerationRecord.case_admission`.
 The GenerationRecord is written for both successful and failed provider attempts.
 Whenever the provider returns content, that unvalidated text is also preserved,
-so failed and partially admitted generations can be inspected. The default
-`api-cases-v4` prompt explicitly counts setup, main, and cleanup requests toward
-the same per-case step limit, demonstrates the object syntax required for
-runtime variable references, and prohibits programming expressions in place of
-literal JSON values. The default output budget is 8192 tokens. Existing artifact
-files are not replaced unless `--overwrite` is explicitly provided.
+so failed and partially admitted generations can be inspected. DeepSeek uses
+the Responses API with `json_schema` output for the complete `TestCaseBatch`
+contract. The default `api-cases-v5` prompt explicitly counts setup, main, and
+cleanup requests toward the same per-case step limit, demonstrates the object
+syntax required for runtime variable references, prohibits programming
+expressions in place of literal JSON values, and tells the model to omit an
+impractical long-string boundary rather than abbreviating it as executable code.
+The default output budget is 8192 tokens. Existing artifact files are not
+replaced unless `--overwrite` is explicitly provided.
 
 Generate the conventional Schemathesis baseline without sending requests to the
 target service:

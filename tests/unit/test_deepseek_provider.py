@@ -35,25 +35,30 @@ def provider_request(**overrides: object) -> ProviderRequest:
 
 def success_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
-        "id": "completion-001",
+        "id": "response-001",
+        "object": "response",
+        "status": "completed",
         "model": "deepseek-v4-flash",
-        "choices": [
+        "output": [
             {
-                "index": 0,
-                "finish_reason": "stop",
-                "message": {
-                    "role": "assistant",
-                    "content": '{"schema_version":"1.0","cases":[]}',
-                },
+                "type": "message",
+                "id": "message-001",
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": '{"schema_version":"1.0","cases":[]}',
+                    }
+                ],
             }
         ],
         "usage": {
-            "prompt_tokens": 100,
-            "completion_tokens": 20,
+            "input_tokens": 100,
+            "input_tokens_details": {"cached_tokens": 40},
+            "output_tokens": 20,
+            "output_tokens_details": {"reasoning_tokens": 0},
             "total_tokens": 120,
-            "prompt_cache_hit_tokens": 40,
-            "prompt_cache_miss_tokens": 60,
-            "completion_tokens_details": {"reasoning_tokens": 0},
         },
     }
     payload.update(overrides)
@@ -72,7 +77,7 @@ def test_deepseek_provider_satisfies_common_protocol() -> None:
         assert provider.name == "deepseek"
 
 
-def test_maps_provider_request_to_deepseek_json_mode() -> None:
+def test_maps_provider_request_to_deepseek_json_schema_output() -> None:
     captured: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -85,26 +90,25 @@ def test_maps_provider_request_to_deepseek_json_mode() -> None:
     with client_for(handler) as client:
         DeepSeekProvider(API_KEY, client=client).generate(common_request)
 
-    assert captured["url"] == "https://api.deepseek.com/chat/completions"
+    assert captured["url"] == "https://api.deepseek.com/responses"
     assert captured["authorization"] == f"Bearer {API_KEY}"
     body = captured["body"]
     assert isinstance(body, dict)
     assert body["model"] == "deepseek-v4-flash"
-    assert body["response_format"] == {"type": "json_object"}
-    assert body["thinking"] == {"type": "disabled"}
+    assert body["instructions"] == common_request.system_prompt
+    assert body["input"] == common_request.user_prompt
+    assert body["text"] == {
+        "format": {
+            "type": "json_schema",
+            "name": "test_case_batch",
+            "schema": common_request.response_schema,
+        }
+    }
+    assert body["reasoning"] == {"effort": "none"}
     assert body["temperature"] == 0.2
-    assert body["max_tokens"] == 8000
+    assert body["max_output_tokens"] == 8000
     assert body["stream"] is False
     assert "seed" not in body
-
-    messages = body["messages"]
-    assert isinstance(messages, list)
-    assert messages[0] == {"role": "system", "content": common_request.system_prompt}
-    user_content = messages[1]["content"]
-    assert isinstance(user_content, str)
-    prompt, schema_text = user_content.rsplit("\n\nRESPONSE_JSON_SCHEMA:\n", 1)
-    assert prompt == common_request.user_prompt
-    assert json.loads(schema_text) == common_request.response_schema
     assert API_KEY not in json.dumps(body)
 
 
@@ -114,7 +118,7 @@ def test_maps_deepseek_response_and_usage() -> None:
 
     assert response.output_text == '{"schema_version":"1.0","cases":[]}'
     assert response.model == "deepseek-v4-flash"
-    assert response.request_id == "completion-001"
+    assert response.request_id == "response-001"
     assert response.finish_reason == "stop"
     assert response.token_usage.input_tokens == 100
     assert response.token_usage.output_tokens == 20
@@ -131,7 +135,7 @@ def test_creates_provider_from_environment_mapping() -> None:
         )
         response = provider.generate(provider_request())
 
-    assert response.request_id == "completion-001"
+    assert response.request_id == "response-001"
 
 
 def test_rejects_missing_environment_key() -> None:
@@ -223,14 +227,27 @@ def test_maps_timeout_to_retryable_provider_error() -> None:
     ("payload", "expected_code"),
     [
         (
-            {"id": "completion-001", "model": "deepseek-v4-flash", "choices": []},
-            "invalid-provider-response",
-        ),
-        (
-            success_payload(choices=[{"finish_reason": "stop", "message": {"content": ""}}]),
+            {
+                "id": "response-001",
+                "object": "response",
+                "status": "completed",
+                "model": "deepseek-v4-flash",
+                "output": [],
+            },
             "empty-output",
         ),
-        (success_payload(usage={"prompt_tokens": -1}), "invalid-provider-response"),
+        (
+            success_payload(
+                output=[
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": ""}],
+                    }
+                ]
+            ),
+            "empty-output",
+        ),
+        (success_payload(usage={"input_tokens": -1}), "invalid-provider-response"),
     ],
 )
 def test_rejects_malformed_or_empty_success_response(
@@ -253,3 +270,25 @@ def test_rejects_non_json_success_response() -> None:
             provider.generate(provider_request())
 
     assert raised.value.code == "invalid-provider-response"
+
+
+def test_preserves_partial_text_and_incomplete_reason() -> None:
+    payload = success_payload(
+        status="incomplete",
+        incomplete_details={"reason": "max_output_tokens"},
+    )
+    with client_for(lambda request: httpx.Response(200, json=payload)) as client:
+        response = DeepSeekProvider(API_KEY, client=client).generate(provider_request())
+
+    assert response.output_text == '{"schema_version":"1.0","cases":[]}'
+    assert response.finish_reason == "incomplete:max_output_tokens"
+
+
+def test_maps_failed_response_to_retryable_provider_error() -> None:
+    payload = success_payload(status="failed", error={"code": "server_error"})
+    with client_for(lambda request: httpx.Response(200, json=payload)) as client:
+        with pytest.raises(LLMProviderError) as raised:
+            DeepSeekProvider(API_KEY, client=client).generate(provider_request())
+
+    assert raised.value.code == "provider-response-failed"
+    assert raised.value.retryable is True

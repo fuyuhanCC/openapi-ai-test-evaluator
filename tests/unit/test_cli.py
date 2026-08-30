@@ -28,19 +28,24 @@ def deepseek_response(content: str, *, status: int = 200) -> httpx.Response:
     return httpx.Response(
         status,
         json={
-            "id": "completion-cli",
+            "id": "response-cli",
+            "object": "response",
+            "status": "completed",
             "model": "deepseek-v4-flash",
-            "choices": [
+            "output": [
                 {
-                    "finish_reason": "stop",
-                    "message": {"role": "assistant", "content": content},
+                    "type": "message",
+                    "status": "completed",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": content}],
                 }
             ],
             "usage": {
-                "prompt_tokens": 100,
-                "completion_tokens": 20,
+                "input_tokens": 100,
+                "input_tokens_details": {"cached_tokens": 0},
+                "output_tokens": 20,
+                "output_tokens_details": {"reasoning_tokens": 0},
                 "total_tokens": 120,
-                "prompt_cache_hit_tokens": 0,
             },
         },
     )
@@ -122,10 +127,10 @@ def test_cases_generate_writes_cases_and_generation_record_with_mock_http(
     assert summary["rejected_cases"] == 0
     assert summary["cases_output"] == str(cases_output)
     assert summary["raw_output"] == str(raw_output)
-    assert captured["url"] == "https://api.deepseek.com/chat/completions"
+    assert captured["url"] == "https://api.deepseek.com/responses"
     body = captured["body"]
     assert isinstance(body, dict)
-    assert body["response_format"] == {"type": "json_object"}
+    assert body["text"]["format"]["type"] == "json_schema"
 
     saved_cases = json.loads(cases_output.read_text(encoding="utf-8"))
     saved_record = json.loads(record_output.read_text(encoding="utf-8"))

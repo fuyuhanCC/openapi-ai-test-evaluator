@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import Mapping
 from types import TracebackType
@@ -19,7 +18,6 @@ from openapi_ai_test_evaluator.generation.provider import (
 
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_API_KEY_ENV = "DEEPSEEK_API_KEY"
-_SCHEMA_MARKER = "\n\nRESPONSE_JSON_SCHEMA:\n"
 
 _HTTP_ERRORS: dict[int, tuple[str, bool]] = {
     400: ("invalid-request", False),
@@ -86,7 +84,7 @@ class DeepSeekProvider:
 
         try:
             response = self._client.post(
-                f"{self._base_url}/chat/completions",
+                f"{self._base_url}/responses",
                 headers={
                     "Authorization": f"Bearer {self._api_key}",
                     "Content-Type": "application/json",
@@ -158,25 +156,20 @@ def _validate_base_url(base_url: str) -> str:
 
 
 def _request_payload(request: ProviderRequest) -> dict[str, object]:
-    schema_json = json.dumps(
-        request.response_schema,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
     return {
         "model": request.model,
-        "messages": [
-            {"role": "system", "content": request.system_prompt},
-            {
-                "role": "user",
-                "content": f"{request.user_prompt}{_SCHEMA_MARKER}{schema_json}",
-            },
-        ],
-        "response_format": {"type": "json_object"},
-        "thinking": {"type": "disabled"},
+        "instructions": request.system_prompt,
+        "input": request.user_prompt,
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "test_case_batch",
+                "schema": request.response_schema,
+            }
+        },
+        "reasoning": {"effort": "none"},
         "temperature": request.temperature,
-        "max_tokens": request.max_output_tokens,
+        "max_output_tokens": request.max_output_tokens,
         "stream": False,
     }
 
@@ -187,32 +180,55 @@ def _parse_response(payload: object) -> ProviderResponse:
 
     request_id = _required_string(payload, "id")
     model = _required_string(payload, "model")
-    choices = payload.get("choices")
-    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-        raise _invalid_provider_response("DeepSeek response has no completion choice")
+    if payload.get("object") != "response":
+        raise _invalid_provider_response("DeepSeek response object must equal 'response'")
+    status = _required_string(payload, "status")
+    if status == "failed":
+        raise LLMProviderError(
+            "provider-response-failed",
+            "DeepSeek Responses API reported a failed response",
+            retryable=True,
+        )
+    if status not in {"completed", "incomplete"}:
+        raise _invalid_provider_response(f"DeepSeek response has unsupported status {status!r}")
 
-    choice = choices[0]
-    message = choice.get("message")
-    if not isinstance(message, dict):
-        raise _invalid_provider_response("DeepSeek completion has no message")
-    content = message.get("content")
-    if not isinstance(content, str):
-        raise _invalid_provider_response("DeepSeek completion content must be a string")
-    if not content.strip():
+    output = payload.get("output")
+    if not isinstance(output, list):
+        raise _invalid_provider_response("DeepSeek response output must be a list")
+    content_parts: list[str] = []
+    for item in output:
+        if not isinstance(item, dict) or item.get("type") != "message":
+            continue
+        content = item.get("content")
+        if not isinstance(content, list):
+            raise _invalid_provider_response("DeepSeek message content must be a list")
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") != "output_text":
+                continue
+            text = part.get("text")
+            if not isinstance(text, str):
+                raise _invalid_provider_response("DeepSeek output_text must contain text")
+            content_parts.append(text)
+    output_text = "".join(content_parts)
+    if not output_text.strip():
         raise LLMProviderError(
             "empty-output",
             "DeepSeek returned empty completion content",
             retryable=True,
         )
 
-    finish_reason = choice.get("finish_reason")
-    if finish_reason is not None and (
-        not isinstance(finish_reason, str) or not finish_reason.strip()
-    ):
-        raise _invalid_provider_response("DeepSeek finish_reason must be a non-empty string")
+    finish_reason = "stop"
+    if status == "incomplete":
+        incomplete_details = payload.get("incomplete_details")
+        if not isinstance(incomplete_details, dict):
+            raise _invalid_provider_response(
+                "incomplete DeepSeek response requires incomplete_details"
+            )
+        reason = _required_string(incomplete_details, "reason")
+        finish_reason = f"incomplete:{reason}"
 
     return ProviderResponse(
-        output_text=content,
+        output_text=output_text,
         model=model,
         request_id=request_id,
         finish_reason=finish_reason,
@@ -226,18 +242,25 @@ def _parse_usage(raw_usage: object) -> GenerationTokenUsage:
     if not isinstance(raw_usage, dict):
         raise _invalid_provider_response("DeepSeek usage must be a JSON object")
 
-    details = raw_usage.get("completion_tokens_details")
-    if details is not None and not isinstance(details, dict):
-        raise _invalid_provider_response("DeepSeek completion_tokens_details must be a JSON object")
+    input_details = raw_usage.get("input_tokens_details")
+    if input_details is not None and not isinstance(input_details, dict):
+        raise _invalid_provider_response("DeepSeek input_tokens_details must be a JSON object")
+    output_details = raw_usage.get("output_tokens_details")
+    if output_details is not None and not isinstance(output_details, dict):
+        raise _invalid_provider_response("DeepSeek output_tokens_details must be a JSON object")
 
     return GenerationTokenUsage(
-        input_tokens=_optional_token_count(raw_usage, "prompt_tokens"),
-        output_tokens=_optional_token_count(raw_usage, "completion_tokens"),
+        input_tokens=_optional_token_count(raw_usage, "input_tokens"),
+        output_tokens=_optional_token_count(raw_usage, "output_tokens"),
         total_tokens=_optional_token_count(raw_usage, "total_tokens"),
-        cached_input_tokens=_optional_token_count(raw_usage, "prompt_cache_hit_tokens"),
+        cached_input_tokens=(
+            _optional_token_count(input_details, "cached_tokens")
+            if isinstance(input_details, dict)
+            else None
+        ),
         reasoning_tokens=(
-            _optional_token_count(details, "reasoning_tokens")
-            if isinstance(details, dict)
+            _optional_token_count(output_details, "reasoning_tokens")
+            if isinstance(output_details, dict)
             else None
         ),
     )
