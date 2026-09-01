@@ -640,8 +640,10 @@ Per-fault outcomes are explicit rather than collapsed prematurely:
 - `not_detected`: an eligible case received the mutation but still passed.
 - `not_triggered`: the proxy did not apply the configured fault.
 - `no_eligible_case`: the mutation reached only cases that did not pass cleanly.
-- `inconclusive`: an eligible mutated case ended in an execution error rather
-  than a deterministic pass/fail verdict.
+- `inconclusive`: an eligible mutated case ended in an execution error without
+  any deterministic failed oracle. If one oracle fails and another check
+  errors in the same case, the failure still counts as detection and the case
+  remains listed in the error evidence.
 
 Fault attribution requires the proxy's sanitized fault ID on the response
 stored in the same case; a run-level trigger count alone is insufficient.

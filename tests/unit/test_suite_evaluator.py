@@ -339,6 +339,59 @@ def test_evaluates_clean_quality_coverage_and_all_fault_outcomes() -> None:
     assert result.fault_summary.faults_detected_per_100_requests == pytest.approx(100 / 15)
 
 
+def test_failed_oracle_detects_fault_even_when_same_case_also_errors() -> None:
+    fault_id = "mixed-failure-fault"
+    clean_case = case("pass-case", "getItem", ExecutionOutcome.PASSED)
+    failed_step = step("getItem", ExecutionOutcome.FAILED, fault_id=fault_id)
+    error_step = step("createItem", ExecutionOutcome.ERROR)
+    mixed_case = CaseResult(
+        case_id="pass-case",
+        outcome=ExecutionOutcome.ERROR,
+        steps=[failed_step, error_step],
+        relations=[],
+        errors=[],
+    )
+    execution = SuiteExecution(
+        suite_id="deepseek-suite",
+        repetition=1,
+        clean=run("run-clean", [clean_case]),
+        faults=(
+            FaultRun(
+                fault_id,
+                run(
+                    "run-mixed-failure",
+                    [mixed_case],
+                    fault_id=fault_id,
+                    triggered=True,
+                ),
+            ),
+        ),
+    )
+    source = generation_record().model_copy(
+        update={
+            "case_admission": CaseAdmissionSummary(
+                received_case_count=1,
+                admitted_case_count=1,
+                rejected_case_count=0,
+                rejections=[],
+            )
+        }
+    )
+
+    result = evaluate_suite_execution(
+        execution,
+        SPEC,
+        source,
+        evaluation_id="evaluation-mixed-failure",
+    )
+
+    fault = result.faults[0]
+    assert fault.outcome is FaultEvaluationOutcome.DETECTED
+    assert fault.detected_case_ids == ["pass-case"]
+    assert fault.errored_case_ids == ["pass-case"]
+    assert fault.first_detection_request == 1
+
+
 def test_maps_schemathesis_adaptation_to_same_admission_metrics() -> None:
     record = AdaptationRecord(
         schema_version="1.0",

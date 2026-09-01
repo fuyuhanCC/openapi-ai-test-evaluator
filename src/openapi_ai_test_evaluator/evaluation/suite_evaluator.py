@@ -20,7 +20,10 @@ from openapi_ai_test_evaluator.domain.evaluation import (
 from openapi_ai_test_evaluator.domain.execution import (
     ExecutionOutcome,
     FaultTriggerStatus,
+    OutcomePolicy,
+    RelationOutcome,
     RunResult,
+    TestCaseResult,
 )
 from openapi_ai_test_evaluator.domain.fault import FAULT_ID_RESPONSE_HEADER
 from openapi_ai_test_evaluator.domain.generation import (
@@ -270,7 +273,7 @@ def _evaluate_fault(
     detected_case_ids = [
         case_id
         for case_id in eligible_case_ids
-        if fault_cases[case_id].outcome is ExecutionOutcome.FAILED
+        if _has_deterministic_failure(fault_cases[case_id])
     ]
     errored_case_ids = [
         case_id
@@ -309,6 +312,19 @@ def _evaluate_fault(
         errored_case_ids=errored_case_ids,
         first_detection_request=first_detection_request,
     )
+
+
+def _has_deterministic_failure(case: TestCaseResult) -> bool:
+    """Recognize a failed oracle even when another check makes the case error."""
+    if case.outcome is ExecutionOutcome.FAILED:
+        return True
+    if any(
+        step.outcome_policy is OutcomePolicy.REQUIRED
+        and step.outcome is ExecutionOutcome.FAILED
+        for step in case.steps
+    ):
+        return True
+    return any(relation.outcome is RelationOutcome.FAILED for relation in case.relations)
 
 
 def _fault_marked_steps(

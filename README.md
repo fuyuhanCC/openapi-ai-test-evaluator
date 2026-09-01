@@ -209,13 +209,14 @@ matrix can instead be run with one command while the same two services are up:
 
 ```bash
 uv run oate benchmark run \
-  --config benchmarks/demo_items/pilot-four-arm.yaml
+  --config benchmarks/demo_items/final-four-arm-v5.yaml
 ```
 
 Paths inside the config are resolved relative to the config file. Every suite
 lists a separate frozen input for each repetition, so repeated LLM generations
 can be compared without pretending that rerunning one fixed batch measures
-generation variability.
+generation variability. The checked-in final configuration runs the four
+native/enhanced arms across three paired repetitions.
 
 The command writes the clean `RunResult`, one `RunResult` per fault, and the
 derived `EvaluationResult` to separate files. Existing output directories are

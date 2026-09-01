@@ -1,0 +1,77 @@
+schema_version: "1.0"
+kind: BenchmarkConfig
+benchmark_id: demo-items-four-arm-v5
+spec: ../../examples/demo-items/openapi.yaml
+repetitions: [1, 2, 3]
+fault_ids:
+  - get-id-as-string
+  - get-missing-name
+  - get-status-error
+  - list-duplicate-first-item
+endpoints:
+  runner_base_url: http://127.0.0.1:8001
+  proxy_control_url: http://127.0.0.1:8001
+  sut_reset_url: http://127.0.0.1:8000/__test__/reset
+execution:
+  timeout_ms: 5000
+  allow_mutations: true
+suites:
+  - suite_id: deepseek-native
+    arm: native
+    inputs:
+      - repetition: 1
+        cases: ../../artifacts/cases/deepseek-v5-r1.json
+        source_record: ../../artifacts/generations/deepseek-v5-r1.json
+      - repetition: 2
+        cases: ../../artifacts/cases/deepseek-v5-r2.json
+        source_record: ../../artifacts/generations/deepseek-v5-r2.json
+      - repetition: 3
+        cases: ../../artifacts/cases/deepseek-v5-r3.json
+        source_record: ../../artifacts/generations/deepseek-v5-r3.json
+  - suite_id: deepseek-enhanced
+    arm: enhanced
+    inputs:
+      - repetition: 1
+        cases: ../../artifacts/cases/deepseek-v5-r1-enhanced.json
+        source_record: ../../artifacts/generations/deepseek-v5-r1.json
+        composition_record: ../../artifacts/compositions/deepseek-v5-r1-enhanced.json
+      - repetition: 2
+        cases: ../../artifacts/cases/deepseek-v5-r2-enhanced.json
+        source_record: ../../artifacts/generations/deepseek-v5-r2.json
+        composition_record: ../../artifacts/compositions/deepseek-v5-r2-enhanced.json
+      - repetition: 3
+        cases: ../../artifacts/cases/deepseek-v5-r3-enhanced.json
+        source_record: ../../artifacts/generations/deepseek-v5-r3.json
+        composition_record: ../../artifacts/compositions/deepseek-v5-r3-enhanced.json
+  - suite_id: schemathesis-native
+    arm: native
+    inputs:
+      - repetition: 1
+        cases: ../../artifacts/cases/schemathesis-r1.json
+        source_record: ../../artifacts/adaptations/schemathesis-r1.json
+      - repetition: 2
+        cases: ../../artifacts/cases/schemathesis-r2.json
+        source_record: ../../artifacts/adaptations/schemathesis-r2.json
+      - repetition: 3
+        cases: ../../artifacts/cases/schemathesis-r3.json
+        source_record: ../../artifacts/adaptations/schemathesis-r3.json
+  - suite_id: schemathesis-enhanced
+    arm: enhanced
+    inputs:
+      - repetition: 1
+        cases: ../../artifacts/cases/schemathesis-r1-enhanced.json
+        source_record: ../../artifacts/adaptations/schemathesis-r1.json
+        composition_record: ../../artifacts/compositions/schemathesis-r1-enhanced.json
+      - repetition: 2
+        cases: ../../artifacts/cases/schemathesis-r2-enhanced.json
+        source_record: ../../artifacts/adaptations/schemathesis-r2.json
+        composition_record: ../../artifacts/compositions/schemathesis-r2-enhanced.json
+      - repetition: 3
+        cases: ../../artifacts/cases/schemathesis-r3-enhanced.json
+        source_record: ../../artifacts/adaptations/schemathesis-r3.json
+        composition_record: ../../artifacts/compositions/schemathesis-r3-enhanced.json
+output_directory: ../../artifacts/runs/demo-items-four-arm-v5
+report:
+  comparison_id: demo-items-four-arm-v5
+  json_output: ../../artifacts/reports/demo-items-four-arm-v5.json
+  markdown_output: ../../artifacts/reports/demo-items-four-arm-v5.md
