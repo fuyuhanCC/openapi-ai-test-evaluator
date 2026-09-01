@@ -41,7 +41,7 @@ def compose_test_case_batches(
     *,
     composition_id: str,
 ) -> ComposedTestCaseBatch:
-    """Append named enhancement batches without mutating any source batch."""
+    """Append namespaced enhancement batches without mutating any source batch."""
     if not enhancements:
         raise SuiteCompositionError("at least one enhancement batch is required")
 
@@ -54,14 +54,17 @@ def compose_test_case_batches(
     enhancement_metadata: list[EnhancementPackMetadata] = []
     for enhancement in enhancements:
         for case in enhancement.batch.cases:
-            existing_origin = origins.get(case.id)
+            namespaced_case = case.model_copy(
+                update={"id": f"{enhancement.pack_id}-{case.id}"}
+            )
+            existing_origin = origins.get(namespaced_case.id)
             if existing_origin is not None:
                 raise SuiteCompositionError(
-                    f"case ID {case.id!r} appears in both {existing_origin} "
-                    f"and enhancement {enhancement.pack_id!r}"
+                    f"namespaced case ID {namespaced_case.id!r} appears in both "
+                    f"{existing_origin} and enhancement {enhancement.pack_id!r}"
                 )
-            origins[case.id] = f"enhancement {enhancement.pack_id!r}"
-            cases.append(case)
+            origins[namespaced_case.id] = f"enhancement {enhancement.pack_id!r}"
+            cases.append(namespaced_case)
         enhancement_metadata.append(
             EnhancementPackMetadata(
                 pack_id=enhancement.pack_id,

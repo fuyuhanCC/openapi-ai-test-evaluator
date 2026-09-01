@@ -373,8 +373,9 @@ a generator failure or silently disappearing from the denominator.
 An augmented experiment arm preserves that original generation or adaptation
 record and adds a separate `SuiteCompositionRecord`. The composition record
 stores the canonical SHA-256 and case count of the native batch, every named
-shared enhancement pack, and the final composed batch. Composition rejects
-duplicate case IDs. Generator admission rates therefore continue to describe
+shared enhancement pack, and the final composed batch. Composition prefixes
+enhancement case IDs with their pack ID and rejects any collision that remains
+after namespacing. Generator admission rates therefore continue to describe
 only generator output, while the evaluator can account for shared enhancement
 cases separately from the total executed suite.
 

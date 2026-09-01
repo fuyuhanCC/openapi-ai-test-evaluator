@@ -39,7 +39,7 @@ def test_composes_batches_and_records_stable_counts_and_hashes() -> None:
     assert [case.id for case in result.batch.cases] == [
         "native-one",
         "native-two",
-        "relation-one",
+        "shared-relations-relation-one",
     ]
     assert result.record.base_batch.case_count == 2
     assert result.record.enhancements[0].batch.case_count == 1
@@ -57,13 +57,43 @@ def test_hash_is_stable_for_equivalent_models_and_changes_with_content() -> None
     assert case_batch_sha256(changed) != case_batch_sha256(original)
 
 
-def test_rejects_duplicate_case_ids_across_batches() -> None:
-    with pytest.raises(SuiteCompositionError, match="appears in both"):
+def test_namespaces_duplicate_source_case_ids_across_batches() -> None:
+    result = compose_test_case_batches(
+        batch("same-case"),
+        [NamedEnhancementBatch("shared-relations", batch("same-case"))],
+        composition_id="valid-composition",
+    )
+
+    assert [case.id for case in result.batch.cases] == [
+        "same-case",
+        "shared-relations-same-case",
+    ]
+
+
+def test_rejects_collision_with_namespaced_enhancement_case_id() -> None:
+    with pytest.raises(SuiteCompositionError, match="namespaced case ID"):
         compose_test_case_batches(
-            batch("same-case"),
+            batch("shared-relations-same-case"),
             [NamedEnhancementBatch("shared-relations", batch("same-case"))],
             composition_id="invalid-composition",
         )
+
+
+def test_namespaces_same_case_id_from_different_enhancement_packs() -> None:
+    result = compose_test_case_batches(
+        batch("native"),
+        [
+            NamedEnhancementBatch("shared-one", batch("same-case")),
+            NamedEnhancementBatch("shared-two", batch("same-case")),
+        ],
+        composition_id="valid-composition",
+    )
+
+    assert [case.id for case in result.batch.cases] == [
+        "native",
+        "shared-one-same-case",
+        "shared-two-same-case",
+    ]
 
 
 def test_rejects_duplicate_enhancement_pack_ids() -> None:

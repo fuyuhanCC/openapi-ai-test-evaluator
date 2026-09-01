@@ -164,11 +164,12 @@ uv run oate cases compose \
   --record-output artifacts/compositions/deepseek-demo-001-enhanced.json
 ```
 
-The command performs no model or HTTP calls. It rejects duplicate case IDs and
-writes a `SuiteCompositionRecord` containing native, enhancement, and composed
-case counts plus canonical SHA-256 values. Run the same command with the
-Schemathesis batch to build the paired enhanced arm from identical shared
-cases.
+The command performs no model or HTTP calls. It prefixes every enhancement case
+ID with its pack ID, preventing ordinary collisions with generator-produced
+case IDs, and rejects any collision that remains after namespacing. It writes a
+`SuiteCompositionRecord` containing native, enhancement, and composed case
+counts plus canonical SHA-256 values. Run the same command with the Schemathesis
+batch to build the paired enhanced arm from identical shared cases.
 
 Start the Demo Items SUT and fault proxy in two separate terminals:
 
