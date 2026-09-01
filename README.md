@@ -11,8 +11,29 @@ oracles.
 > assertions, extraction, setup/main/cleanup sequencing, and
 > metamorphic/lifecycle relations. Response fault injection, clean-versus-fault
 > orchestration, single-suite evaluation, and multi-repetition comparison
-> reports are implemented for the Demo Items fixture. PetClinic packaging and
-> the top-level benchmark command remain to be implemented.
+> reports are implemented and exercised in a three-repetition, four-arm Demo
+> Items experiment. Docker Compose/CI packaging and an external PetClinic
+> benchmark remain to be implemented.
+
+## Experiment snapshot
+
+The completed Demo Items experiment compares native DeepSeek and Schemathesis
+cases, then adds the same seven lifecycle/metamorphic cases to each generator.
+Every suite is executed by the same runner against a clean service and four
+deterministic response faults.
+
+| Suite | Native admitted / executed | Operation coverage | Clean false positives | Fault detection | Mean requests | Mean API cost |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| DeepSeek native | 16.7 / 16.7 | 94.4% | 0.0% | 75.0% | 118.3 | $0.006783 |
+| DeepSeek + shared relations | 16.7 / 23.7 | 100.0% | 0.0% | 100.0% | 258.3 | $0.006783 |
+| Schemathesis native | 223.3 / 223.3 | 100.0% | 0.0% | 75.0% | 1116.7 | $0.000000 |
+| Schemathesis + shared relations | 223.3 / 230.3 | 100.0% | 0.0% | 100.0% | 1256.7 | $0.000000 |
+
+Values are means across three independently generated/adapted repetitions.
+Suite sizes were not equalized, so request counts remain part of the result
+rather than being hidden behind a common budget. See the
+[experiment result and limitations](docs/results/demo-items-four-arm-v5.md) for
+the full interpretation.
 
 ## What works today
 
@@ -340,4 +361,6 @@ uv lock --check
 ## Documentation
 
 See [docs/design.md](docs/design.md) for the V1 architecture, experiment design,
-supported OpenAPI scope, and acceptance criteria.
+supported OpenAPI scope, and acceptance criteria. See
+[docs/results/demo-items-four-arm-v5.md](docs/results/demo-items-four-arm-v5.md)
+for the frozen three-repetition Demo Items result.
