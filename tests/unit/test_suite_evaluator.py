@@ -34,6 +34,7 @@ from openapi_ai_test_evaluator.domain.generation import (
     GenerationStatus,
     GenerationTokenUsage,
 )
+from openapi_ai_test_evaluator.domain.pricing import TokenPricingSnapshot
 from openapi_ai_test_evaluator.evaluation import (
     EvaluatedSuite,
     EvaluationInputError,
@@ -392,6 +393,66 @@ def test_failed_oracle_detects_fault_even_when_same_case_also_errors() -> None:
     assert fault.first_detection_request == 1
 
 
+def test_applies_and_preserves_explicit_token_pricing() -> None:
+    source = generation_record().model_copy(
+        update={
+            "token_usage": GenerationTokenUsage(
+                input_tokens=100,
+                cached_input_tokens=20,
+                output_tokens=50,
+                total_tokens=150,
+            )
+        }
+    )
+    pricing = TokenPricingSnapshot(
+        pricing_id="deepseek-v4-flash-peak",
+        provider="deepseek",
+        model="deepseek-v4-flash",
+        rate_class="peak",
+        cached_input_usd_per_unit=0.014,
+        uncached_input_usd_per_unit=0.44,
+        output_usd_per_unit=1.32,
+        effective_from=datetime(2026, 8, 16, 16, tzinfo=UTC),
+        captured_at=datetime(2026, 9, 1, 2, 34, 7, tzinfo=UTC),
+        source_url="https://api-docs.deepseek.com/quick_start/pricing/",
+    )
+
+    result = evaluate_suite_execution(
+        suite_execution(),
+        SPEC,
+        source,
+        evaluation_id="evaluation-priced",
+        pricing=pricing,
+    )
+
+    assert result.generator.pricing == pricing
+    assert result.generator.estimated_cost_usd == pytest.approx(0.00010148)
+
+
+def test_rejects_pricing_for_the_wrong_model() -> None:
+    pricing = TokenPricingSnapshot(
+        pricing_id="other-model-price",
+        provider="deepseek",
+        model="other-model",
+        rate_class="standard",
+        cached_input_usd_per_unit=0.1,
+        uncached_input_usd_per_unit=0.1,
+        output_usd_per_unit=0.2,
+        effective_from=datetime(2026, 1, 1, tzinfo=UTC),
+        captured_at=datetime(2026, 9, 1, tzinfo=UTC),
+        source_url="https://example.com/pricing",
+    )
+
+    with pytest.raises(EvaluationInputError, match="provider/model"):
+        evaluate_suite_execution(
+            suite_execution(),
+            SPEC,
+            generation_record(),
+            evaluation_id="evaluation-wrong-price",
+            pricing=pricing,
+        )
+
+
 def test_maps_schemathesis_adaptation_to_same_admission_metrics() -> None:
     record = AdaptationRecord(
         schema_version="1.0",
@@ -416,6 +477,7 @@ def test_maps_schemathesis_adaptation_to_same_admission_metrics() -> None:
     assert result.generator.kind is GeneratorKind.SCHEMA_TOOL
     assert result.generator.name == "schemathesis"
     assert result.generator.generation_request_count == 0
+    assert result.generator.estimated_cost_usd == 0.0
     assert result.admission.admission_rate == pytest.approx(0.75)
 
 

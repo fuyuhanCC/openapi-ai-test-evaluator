@@ -15,6 +15,7 @@ from openapi_ai_test_evaluator.domain.generation import (
     GenerationRecord,
 )
 from openapi_ai_test_evaluator.domain.openapi import OpenAPISpec, OperationModel
+from openapi_ai_test_evaluator.domain.pricing import TokenPricingSnapshot
 from openapi_ai_test_evaluator.domain.reporting import ComparisonResult
 from openapi_ai_test_evaluator.domain.test_case import (
     ExecutionConfig,
@@ -45,4 +46,5 @@ __all__ = [
     "TestCaseBatch",
     "TestCaseResult",
     "TestPlan",
+    "TokenPricingSnapshot",
 ]

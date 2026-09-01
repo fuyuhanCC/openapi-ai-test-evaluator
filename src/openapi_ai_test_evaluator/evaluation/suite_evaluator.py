@@ -33,6 +33,8 @@ from openapi_ai_test_evaluator.domain.generation import (
     GenerationTokenUsage,
 )
 from openapi_ai_test_evaluator.domain.openapi import OpenAPISpec
+from openapi_ai_test_evaluator.domain.pricing import TokenPricingSnapshot
+from openapi_ai_test_evaluator.evaluation.pricing import estimate_token_cost_usd
 from openapi_ai_test_evaluator.evaluation.suite_runner import FaultRun, SuiteExecution
 
 
@@ -47,9 +49,10 @@ def evaluate_suite_execution(
     *,
     evaluation_id: str,
     composition_record: SuiteCompositionRecord | None = None,
+    pricing: TokenPricingSnapshot | None = None,
 ) -> EvaluationResult:
     """Evaluate one generator suite without modifying or hiding its raw runs."""
-    generator, admission = _source_metrics(source_record)
+    generator, admission = _source_metrics(source_record, pricing)
     expected_execution_count = admission.admitted_case_count
     composition = None
     if composition_record is not None:
@@ -160,6 +163,20 @@ def validate_composed_suite_case_counts(
         )
 
 
+def validate_source_record_pricing(
+    source_record: GenerationRecord | AdaptationRecord,
+    pricing: TokenPricingSnapshot | None,
+) -> None:
+    """Reject pricing that cannot be applied to one frozen source record."""
+    if pricing is None:
+        return
+    if not isinstance(source_record, GenerationRecord):
+        raise EvaluationInputError("schema-tool records cannot use LLM token pricing")
+    if pricing.provider != source_record.provider or pricing.model != source_record.model:
+        raise EvaluationInputError("pricing provider/model does not match the generation record")
+    estimate_token_cost_usd(source_record.token_usage, pricing)
+
+
 def _composition_metadata(record: SuiteCompositionRecord) -> SuiteCompositionMetadata:
     return SuiteCompositionMetadata(
         composition_id=record.composition_id,
@@ -173,6 +190,7 @@ def _composition_metadata(record: SuiteCompositionRecord) -> SuiteCompositionMet
 
 def _source_metrics(
     record: GenerationRecord | AdaptationRecord,
+    pricing: TokenPricingSnapshot | None = None,
 ) -> tuple[GeneratorMetadata, CaseAdmissionMetrics]:
     if isinstance(record, GenerationRecord):
         if record.status is not GenerationStatus.SUCCEEDED or record.case_admission is None:
@@ -180,6 +198,12 @@ def _source_metrics(
                 "LLM evaluation requires a successful record with case admission metrics"
             )
         summary = record.case_admission
+        validate_source_record_pricing(record, pricing)
+        estimated_cost_usd = (
+            estimate_token_cost_usd(record.token_usage, pricing)
+            if pricing is not None
+            else record.estimated_cost_usd
+        )
         generator = GeneratorMetadata(
             kind=GeneratorKind.LLM,
             name=record.provider,
@@ -189,12 +213,14 @@ def _source_metrics(
             generation_request_count=record.request_count,
             generation_duration_ms=record.duration_ms,
             token_usage=record.token_usage,
-            estimated_cost_usd=record.estimated_cost_usd,
+            pricing=pricing,
+            estimated_cost_usd=estimated_cost_usd,
         )
         admitted = summary.admitted_case_count
         received = summary.received_case_count
         rejected = summary.rejected_case_count
     else:
+        validate_source_record_pricing(record, pricing)
         generator = GeneratorMetadata(
             kind=GeneratorKind.SCHEMA_TOOL,
             name=record.tool,
@@ -204,7 +230,8 @@ def _source_metrics(
             generation_request_count=0,
             generation_duration_ms=record.duration_ms,
             token_usage=GenerationTokenUsage(),
-            estimated_cost_usd=None,
+            pricing=None,
+            estimated_cost_usd=0.0,
         )
         admitted = record.adapted_case_count
         received = record.received_case_count

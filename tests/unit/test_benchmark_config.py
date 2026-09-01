@@ -98,6 +98,31 @@ def test_loads_the_demo_four_arm_config() -> None:
     assert config.fault_ids[-1] == "list-duplicate-first-item"
 
 
+def test_loads_final_config_with_explicit_repetition_pricing() -> None:
+    config = load_benchmark_config(
+        ROOT / "benchmarks/demo_items/final-four-arm-v5.yaml"
+    )
+
+    assert {snapshot.rate_class for snapshot in config.pricing} == {"peak", "off-peak"}
+    deepseek = config.suites[0]
+    assert [item.pricing_id for item in deepseek.inputs] == [
+        "deepseek-v4-flash-2026-08-peak",
+        "deepseek-v4-flash-2026-08-peak",
+        "deepseek-v4-flash-2026-08-off-peak",
+    ]
+    assert all(item.pricing_id is None for item in config.suites[2].inputs)
+
+
+def test_rejects_unknown_pricing_reference() -> None:
+    raw = valid_config()
+    suites = raw["suites"]
+    assert isinstance(suites, list)
+    suites[0]["inputs"][0]["pricing_id"] = "unknown-price"  # type: ignore[index]
+
+    with pytest.raises(ValueError, match="references unknown pricing"):
+        BenchmarkConfig.model_validate(raw)
+
+
 def test_reports_malformed_yaml_as_a_config_error(tmp_path: Path) -> None:
     path = tmp_path / "benchmark.yaml"
     path.write_text("suites: [\n", encoding="utf-8")

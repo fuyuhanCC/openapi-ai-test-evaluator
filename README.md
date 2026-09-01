@@ -216,7 +216,11 @@ Paths inside the config are resolved relative to the config file. Every suite
 lists a separate frozen input for each repetition, so repeated LLM generations
 can be compared without pretending that rerunning one fixed batch measures
 generation variability. The checked-in final configuration runs the four
-native/enhanced arms across three paired repetitions.
+native/enhanced arms across three paired repetitions. LLM inputs reference a
+versioned `pricing_id`; the corresponding top-level snapshot records the
+provider, model, peak/off-peak rate class, cached and uncached input rates,
+output rate, capture time, and source URL. Cost is derived from frozen token
+usage without modifying the original generation record.
 
 The command writes the clean `RunResult`, one `RunResult` per fault, and the
 derived `EvaluationResult` to separate files. Existing output directories are

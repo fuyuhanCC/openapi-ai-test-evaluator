@@ -12,6 +12,7 @@ from openapi_ai_test_evaluator.domain.composition import SuiteCompositionRecord
 from openapi_ai_test_evaluator.domain.evaluation import EvaluationResult
 from openapi_ai_test_evaluator.domain.generation import AdaptationRecord, GenerationRecord
 from openapi_ai_test_evaluator.domain.openapi import OpenAPISpec
+from openapi_ai_test_evaluator.domain.pricing import TokenPricingSnapshot
 from openapi_ai_test_evaluator.domain.reporting import ComparisonResult
 from openapi_ai_test_evaluator.domain.test_case import TestCaseBatch
 from openapi_ai_test_evaluator.evaluation.input_artifacts import (
@@ -22,6 +23,7 @@ from openapi_ai_test_evaluator.evaluation.suite_evaluator import (
     EvaluationInputError,
     validate_composed_suite_case_counts,
     validate_source_record_case_count,
+    validate_source_record_pricing,
 )
 from openapi_ai_test_evaluator.evaluation.suite_pipeline import (
     EvaluatedSuiteArtifactPaths,
@@ -66,6 +68,7 @@ class PreparedBenchmarkRun:
     batch: TestCaseBatch
     source_record: GenerationRecord | AdaptationRecord
     composition_record: SuiteCompositionRecord | None
+    pricing: TokenPricingSnapshot | None
     input_paths: tuple[Path, ...]
     output_directory: Path
 
@@ -132,6 +135,7 @@ def run_benchmark_config(
                 sut_reset_url=str(config.endpoints.sut_reset_url),
                 fault_ids=list(config.fault_ids),
                 composition_record=item.composition_record,
+                pricing=item.pricing,
                 timeout_ms=config.execution.timeout_ms,
                 allow_mutations=config.execution.allow_mutations,
                 execution_transport=execution_transport,
@@ -189,6 +193,7 @@ def _prepare_runs(
         raise BenchmarkRunError("openapi", str(error)) from error
 
     prepared: list[PreparedBenchmarkRun] = []
+    pricing_by_id = {snapshot.pricing_id: snapshot for snapshot in config.pricing}
     for suite in config.suites:
         for item in sorted(suite.inputs, key=lambda value: value.repetition):
             cases_path = _resolve_path(base_directory, item.cases)
@@ -197,6 +202,9 @@ def _prepare_runs(
                 _resolve_path(base_directory, item.composition_record)
                 if item.composition_record is not None
                 else None
+            )
+            pricing = (
+                pricing_by_id[item.pricing_id] if item.pricing_id is not None else None
             )
             try:
                 batch = load_test_case_batch(cases_path)
@@ -211,6 +219,7 @@ def _prepare_runs(
                     else None
                 )
                 _validate_frozen_input(batch, source_record, composition_record)
+                validate_source_record_pricing(source_record, pricing)
             except (ValueError, OSError) as error:
                 raise BenchmarkRunError(
                     "suite-input",
@@ -225,6 +234,7 @@ def _prepare_runs(
                     batch=batch,
                     source_record=source_record,
                     composition_record=composition_record,
+                    pricing=pricing,
                     input_paths=(
                         cases_path,
                         source_record_path,

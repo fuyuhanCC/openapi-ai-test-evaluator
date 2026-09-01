@@ -16,11 +16,16 @@ from openapi_ai_test_evaluator.evaluation.input_artifacts import (
     load_composition_record,
     load_source_record,
 )
+from openapi_ai_test_evaluator.evaluation.pricing import (
+    PricingCalculationError,
+    estimate_token_cost_usd,
+)
 from openapi_ai_test_evaluator.evaluation.suite_evaluator import (
     EvaluationInputError,
     evaluate_suite_execution,
     validate_composed_suite_case_counts,
     validate_source_record_case_count,
+    validate_source_record_pricing,
 )
 from openapi_ai_test_evaluator.evaluation.suite_pipeline import (
     EvaluatedSuite,
@@ -47,10 +52,12 @@ __all__ = [
     "EvaluatedSuiteArtifactPaths",
     "EvaluationInputError",
     "FaultRun",
+    "PricingCalculationError",
     "SuiteExecution",
     "SuiteArtifactError",
     "execute_fault_suite",
     "evaluate_suite_execution",
+    "estimate_token_cost_usd",
     "load_composition_record",
     "load_benchmark_config",
     "load_source_record",
@@ -59,5 +66,6 @@ __all__ = [
     "SourceRecordLoadError",
     "validate_composed_suite_case_counts",
     "validate_source_record_case_count",
+    "validate_source_record_pricing",
     "write_evaluated_suite_artifacts",
 ]

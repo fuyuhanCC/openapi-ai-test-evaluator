@@ -8,6 +8,7 @@ from typing import Annotated, Literal, Self
 from pydantic import AnyHttpUrl, Field, model_validator
 
 from openapi_ai_test_evaluator.domain.contracts import ContractModel, Identifier
+from openapi_ai_test_evaluator.domain.pricing import TokenPricingSnapshot
 
 PositiveInt = Annotated[int, Field(ge=1)]
 PathText = Annotated[str, Field(min_length=1)]
@@ -42,6 +43,7 @@ class BenchmarkRepetitionInput(ContractModel):
     cases: PathText
     source_record: PathText
     composition_record: PathText | None = None
+    pricing_id: Identifier | None = None
 
 
 class BenchmarkSuiteConfig(ContractModel):
@@ -83,6 +85,7 @@ class BenchmarkConfig(ContractModel):
     fault_ids: list[Identifier] = Field(min_length=1)
     endpoints: BenchmarkEndpoints
     execution: BenchmarkExecutionConfig = Field(default_factory=BenchmarkExecutionConfig)
+    pricing: list[TokenPricingSnapshot] = Field(default_factory=list)
     suites: list[BenchmarkSuiteConfig] = Field(min_length=2)
     output_directory: PathText
     report: BenchmarkReportConfig
@@ -98,6 +101,10 @@ class BenchmarkConfig(ContractModel):
         suite_ids = [suite.suite_id for suite in self.suites]
         if len(suite_ids) != len(set(suite_ids)):
             raise ValueError("benchmark suite IDs must be unique")
+        pricing_ids = [snapshot.pricing_id for snapshot in self.pricing]
+        if len(pricing_ids) != len(set(pricing_ids)):
+            raise ValueError("benchmark pricing IDs must be unique")
+        known_pricing_ids = set(pricing_ids)
         expected_repetitions = set(self.repetitions)
         for suite in self.suites:
             actual_repetitions = {item.repetition for item in suite.inputs}
@@ -105,6 +112,14 @@ class BenchmarkConfig(ContractModel):
                 raise ValueError(
                     f"suite {suite.suite_id!r} inputs must match benchmark repetitions"
                 )
+            unknown_pricing_ids = {
+                item.pricing_id
+                for item in suite.inputs
+                if item.pricing_id is not None and item.pricing_id not in known_pricing_ids
+            }
+            if unknown_pricing_ids:
+                unknown = ", ".join(sorted(unknown_pricing_ids))
+                raise ValueError(f"suite {suite.suite_id!r} references unknown pricing: {unknown}")
         return self
 
 

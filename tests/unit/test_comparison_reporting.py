@@ -146,7 +146,7 @@ def paired_evaluations() -> list[EvaluationResult]:
             covered_operations=4,
             detected=True,
             generation_duration_ms=40,
-            estimated_cost_usd=None,
+            estimated_cost_usd=0.0,
         ),
         evaluation(
             "schemathesis",
@@ -158,7 +158,7 @@ def paired_evaluations() -> list[EvaluationResult]:
             covered_operations=4,
             detected=True,
             generation_duration_ms=60,
-            estimated_cost_usd=None,
+            estimated_cost_usd=0.0,
         ),
     ]
 
@@ -199,8 +199,8 @@ def test_aggregates_raw_normalized_cost_and_fault_stability_metrics() -> None:
     assert deepseek.faults[0].first_detection_request.values == [2.0]
     assert deepseek.faults[0].first_detection_request.missing_count == 1
     assert schemathesis.suite_id == "schemathesis"
-    assert schemathesis.estimated_cost_usd.sample_count == 0
-    assert schemathesis.estimated_cost_usd.missing_count == 2
+    assert schemathesis.estimated_cost_usd.values == [0.0, 0.0]
+    assert schemathesis.estimated_cost_usd.mean == 0.0
 
 
 def test_reports_native_and_shared_case_counts_for_mixed_four_arm_comparisons() -> None:

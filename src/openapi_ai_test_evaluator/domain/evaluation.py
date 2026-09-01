@@ -9,6 +9,7 @@ from pydantic import Field, model_validator
 
 from openapi_ai_test_evaluator.domain.contracts import ContractModel, Identifier
 from openapi_ai_test_evaluator.domain.generation import GenerationTokenUsage
+from openapi_ai_test_evaluator.domain.pricing import TokenPricingSnapshot
 
 NonNegativeInt = Annotated[int, Field(ge=0)]
 PositiveInt = Annotated[int, Field(ge=1)]
@@ -38,6 +39,7 @@ class GeneratorMetadata(ContractModel):
     generation_request_count: NonNegativeInt
     generation_duration_ms: NonNegativeInt | None = None
     token_usage: GenerationTokenUsage = Field(default_factory=GenerationTokenUsage)
+    pricing: TokenPricingSnapshot | None = None
     estimated_cost_usd: NonNegativeFloat | None = None
 
 

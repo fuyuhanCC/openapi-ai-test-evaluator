@@ -145,9 +145,10 @@ def test_captures_and_adapts_a_real_schemathesis_case() -> None:
     operation = schema["/items"]["GET"]
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        case = operation.as_strategy(
+        generated = operation.as_strategy(
             generation_mode=schemathesis.GenerationMode.POSITIVE
         ).example()
+    case = operation.Case(query={"limit": 20}, _meta=generated.meta)
 
     capture = capture_schemathesis_case(case, SPEC, case_id="schemathesis-real-1")
 

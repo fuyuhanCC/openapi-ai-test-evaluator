@@ -662,6 +662,15 @@ The summary separately includes native admitted, shared enhancement, and total
 executed case counts, alongside admission and executable rates, operation
 coverage, clean false positives, fault detection, detections per 100 fault
 requests, raw request counts, durations, token usage, and estimated cost.
+Estimated LLM cost is calculated from an explicit benchmark pricing snapshot,
+not a live or hard-coded provider price. Each LLM repetition references a
+`pricing_id`, allowing calls made under different peak/off-peak rate classes to
+share the same experiment while preserving the exact cached-input,
+uncached-input, and output rates used. The applied snapshot is copied into the
+`EvaluationResult`; the original `GenerationRecord` remains unchanged.
+The estimated API cost for a local schema tool is recorded as zero because it
+makes no paid model call; its local generation and execution durations remain
+separate efficiency metrics and are not claimed to be zero-cost computation.
 Per-fault stability preserves all five evaluation outcome counts instead of
 reducing unstable or unevaluable runs to a false zero. Comparison reports
 describe the measurements but do not manufacture a single weighted winner
