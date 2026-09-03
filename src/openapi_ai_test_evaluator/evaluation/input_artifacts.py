@@ -46,9 +46,7 @@ def load_composition_record(path: Path) -> SuiteCompositionRecord:
     try:
         return SuiteCompositionRecord.model_validate_json(serialized)
     except ValidationError as error:
-        raise CompositionRecordLoadError(
-            f"invalid composition record {path}: {error}"
-        ) from error
+        raise CompositionRecordLoadError(f"invalid composition record {path}: {error}") from error
 
 
 __all__ = [

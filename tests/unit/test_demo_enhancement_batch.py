@@ -19,9 +19,7 @@ def test_demo_shared_enhancement_batch_is_semantically_valid() -> None:
 
 
 def test_demo_shared_enhancement_batch_covers_every_v1_relation_and_uniqueness() -> None:
-    relation_types = {
-        relation.type for case in BATCH.cases for relation in case.relations
-    }
+    relation_types = {relation.type for case in BATCH.cases for relation in case.relations}
     assertion_operators = {
         assertion.operator
         for case in BATCH.cases

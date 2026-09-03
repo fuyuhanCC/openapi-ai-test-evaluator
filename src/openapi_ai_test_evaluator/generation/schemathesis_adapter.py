@@ -307,9 +307,7 @@ def _expected_statuses(
         return status in _NEGATIVE_REJECTION_STATUSES
 
     statuses = sorted(
-        int(status)
-        for status in operation.responses
-        if status.isdigit() and accepted(int(status))
+        int(status) for status in operation.responses if status.isdigit() and accepted(int(status))
     )
     return tuple(statuses)
 

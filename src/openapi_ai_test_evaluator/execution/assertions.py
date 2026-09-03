@@ -177,9 +177,7 @@ def _evaluate_predicate(
         return len(actual) == expected
     if operator is AssertionOperator.ITEMS_UNIQUE_BY:
         if not isinstance(expected, str):
-            raise _AssertionEvaluationError(
-                "items_unique_by expected value is not a JSON Pointer"
-            )
+            raise _AssertionEvaluationError("items_unique_by expected value is not a JSON Pointer")
         return _items_are_unique_by(actual, expected)
     if operator is AssertionOperator.GREATER_THAN:
         if not _is_number(expected):

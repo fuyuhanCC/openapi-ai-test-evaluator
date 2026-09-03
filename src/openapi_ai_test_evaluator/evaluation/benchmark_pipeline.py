@@ -203,9 +203,7 @@ def _prepare_runs(
                 if item.composition_record is not None
                 else None
             )
-            pricing = (
-                pricing_by_id[item.pricing_id] if item.pricing_id is not None else None
-            )
+            pricing = pricing_by_id[item.pricing_id] if item.pricing_id is not None else None
             try:
                 batch = load_test_case_batch(cases_path)
                 issues = validate_test_case_batch_semantics(batch, spec)
@@ -240,9 +238,7 @@ def _prepare_runs(
                         source_record_path,
                         *((composition_record_path,) if composition_record_path else ()),
                     ),
-                    output_directory=(
-                        output_directory / suite.suite_id / f"r{item.repetition}"
-                    ),
+                    output_directory=(output_directory / suite.suite_id / f"r{item.repetition}"),
                 )
             )
     return prepared, spec

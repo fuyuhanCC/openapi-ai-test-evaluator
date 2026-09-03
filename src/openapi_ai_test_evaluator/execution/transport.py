@@ -73,9 +73,7 @@ class HttpTransport:
         timeout_seconds = request.timeout_ms / 1000
         request_body = encode_json_body(request)
         headers = dict(request.headers)
-        if request.has_json_body and not any(
-            name.casefold() == "content-type" for name in headers
-        ):
+        if request.has_json_body and not any(name.casefold() == "content-type" for name in headers):
             headers["Content-Type"] = "application/json"
 
         try:

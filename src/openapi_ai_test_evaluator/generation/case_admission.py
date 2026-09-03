@@ -113,9 +113,7 @@ def admit_generated_cases(
         rejected_case_count=len(rejections),
         rejections=rejections,
     )
-    batch = (
-        TestCaseBatch(schema_version="1.0", cases=admitted_cases) if admitted_cases else None
-    )
+    batch = TestCaseBatch(schema_version="1.0", cases=admitted_cases) if admitted_cases else None
     return GeneratedCaseAdmission(batch=batch, summary=summary)
 
 

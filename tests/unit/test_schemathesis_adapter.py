@@ -66,10 +66,13 @@ def test_adapts_a_positive_json_request_to_one_runner_step() -> None:
         AssertionOperator.SCHEMA_MATCHES,
     ]
     assert step.assertions[0].expected == 201
-    assert validate_test_case_batch_semantics(
-        CaseBatch(schema_version="1.0", cases=[adaptation.case]),
-        SPEC,
-    ) == []
+    assert (
+        validate_test_case_batch_semantics(
+            CaseBatch(schema_version="1.0", cases=[adaptation.case]),
+            SPEC,
+        )
+        == []
+    )
 
 
 def test_positive_resource_request_accepts_success_or_not_found() -> None:
@@ -117,10 +120,13 @@ def test_adapts_a_negative_request_with_inferred_violations_and_status_set() -> 
     ]
     assert step.assertions[0].operator is AssertionOperator.STATUS_IN
     assert step.assertions[0].expected == [400, 404]
-    assert validate_test_case_batch_semantics(
-        CaseBatch(schema_version="1.0", cases=[adaptation.case]),
-        SPEC,
-    ) == []
+    assert (
+        validate_test_case_batch_semantics(
+            CaseBatch(schema_version="1.0", cases=[adaptation.case]),
+            SPEC,
+        )
+        == []
+    )
 
 
 def test_preserves_explicit_json_null_as_a_negative_type_violation() -> None:

@@ -54,9 +54,7 @@ def compose_test_case_batches(
     enhancement_metadata: list[EnhancementPackMetadata] = []
     for enhancement in enhancements:
         for case in enhancement.batch.cases:
-            namespaced_case = case.model_copy(
-                update={"id": f"{enhancement.pack_id}-{case.id}"}
-            )
+            namespaced_case = case.model_copy(update={"id": f"{enhancement.pack_id}-{case.id}"})
             existing_origin = origins.get(namespaced_case.id)
             if existing_origin is not None:
                 raise SuiteCompositionError(

@@ -158,9 +158,7 @@ def validate_composed_suite_case_counts(
             "source record admitted case count does not match the composition base batch"
         )
     if case_count != composition_record.composed_batch.case_count:
-        raise EvaluationInputError(
-            "frozen batch case count does not match the composition record"
-        )
+        raise EvaluationInputError("frozen batch case count does not match the composition record")
 
 
 def validate_source_record_pricing(
@@ -298,9 +296,7 @@ def _evaluate_fault(
     eligible_case_ids = [case_id for case_id in triggered_case_ids if case_id in clean_passed_ids]
     fault_cases = {case.case_id: case for case in result.cases}
     detected_case_ids = [
-        case_id
-        for case_id in eligible_case_ids
-        if _has_deterministic_failure(fault_cases[case_id])
+        case_id for case_id in eligible_case_ids if _has_deterministic_failure(fault_cases[case_id])
     ]
     errored_case_ids = [
         case_id
@@ -346,8 +342,7 @@ def _has_deterministic_failure(case: TestCaseResult) -> bool:
     if case.outcome is ExecutionOutcome.FAILED:
         return True
     if any(
-        step.outcome_policy is OutcomePolicy.REQUIRED
-        and step.outcome is ExecutionOutcome.FAILED
+        step.outcome_policy is OutcomePolicy.REQUIRED and step.outcome is ExecutionOutcome.FAILED
         for step in case.steps
     ):
         return True

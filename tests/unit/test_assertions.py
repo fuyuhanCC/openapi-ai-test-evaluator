@@ -63,12 +63,8 @@ def test_executes_status_and_json_equality_with_generated_ids() -> None:
 def test_executes_status_membership() -> None:
     plan_assertion = assertion(operator="status_in", expected=[400, 422])
 
-    passed = execute_assertions(
-        [plan_assertion], processed_response({}, status_code=422), {}
-    )[0]
-    failed = execute_assertions(
-        [plan_assertion], processed_response({}, status_code=200), {}
-    )[0]
+    passed = execute_assertions([plan_assertion], processed_response({}, status_code=422), {})[0]
+    failed = execute_assertions([plan_assertion], processed_response({}, status_code=200), {})[0]
 
     assert passed.outcome is ExecutionOutcome.PASSED
     assert passed.actual == 422
@@ -204,9 +200,7 @@ def test_collection_uniqueness_errors_when_selected_value_is_not_an_array() -> N
         expected="/id",
     )
 
-    result = execute_assertions(
-        [plan_assertion], processed_response({"items": {"id": 1}}), {}
-    )[0]
+    result = execute_assertions([plan_assertion], processed_response({"items": {"id": 1}}), {})[0]
 
     assert result.outcome is ExecutionOutcome.ERROR
     assert result.message == "items_unique_by actual value is not an array"

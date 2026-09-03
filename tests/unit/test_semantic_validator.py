@@ -390,9 +390,7 @@ def test_reports_missing_required_body_and_unexpected_body() -> None:
 
 
 def test_distinguishes_missing_required_body_from_explicit_json_null() -> None:
-    missing_data = deepcopy(
-        load_test_plan(PLAN_DIR / "all-methods.yaml").model_dump(mode="json")
-    )
+    missing_data = deepcopy(load_test_plan(PLAN_DIR / "all-methods.yaml").model_dump(mode="json"))
     missing_request = _first_step(missing_data)["request"]
     assert isinstance(missing_request, dict)
     del missing_request["body"]

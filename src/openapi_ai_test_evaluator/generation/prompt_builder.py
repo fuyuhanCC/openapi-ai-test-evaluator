@@ -23,10 +23,13 @@ Follow the supplied response JSON Schema exactly and return one JSON object only
 Do not return Markdown, code fences, explanations, Python, or pytest code.
 """
 
-_SYSTEM_PROMPT_V5 = _LEGACY_SYSTEM_PROMPT + """\
+_SYSTEM_PROMPT_V5 = (
+    _LEGACY_SYSTEM_PROMPT
+    + """\
 The response is parsed as RFC 8259 JSON data and no expression is ever evaluated.
 If a boundary value is impractical to write as a complete JSON literal, omit that case.
 """
+)
 
 
 class PromptBuildError(ValueError):
@@ -80,9 +83,7 @@ def build_provider_request(spec: OpenAPISpec, config: GenerationConfig) -> Provi
     return ProviderRequest(
         model=config.model,
         system_prompt=(
-            _SYSTEM_PROMPT_V5
-            if config.prompt_version == "api-cases-v5"
-            else _LEGACY_SYSTEM_PROMPT
+            _SYSTEM_PROMPT_V5 if config.prompt_version == "api-cases-v5" else _LEGACY_SYSTEM_PROMPT
         ),
         user_prompt=json.dumps(
             instructions,
