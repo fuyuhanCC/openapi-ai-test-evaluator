@@ -1,0 +1,342 @@
+{
+  "$defs": {
+    "BenchmarkEndpoints": {
+      "additionalProperties": false,
+      "description": "Already-running services used by every configured suite.",
+      "properties": {
+        "runner_base_url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Runner Base Url",
+          "type": "string"
+        },
+        "proxy_control_url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Proxy Control Url",
+          "type": "string"
+        },
+        "sut_reset_url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Sut Reset Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runner_base_url",
+        "proxy_control_url",
+        "sut_reset_url"
+      ],
+      "title": "BenchmarkEndpoints",
+      "type": "object"
+    },
+    "BenchmarkExecutionConfig": {
+      "additionalProperties": false,
+      "description": "Execution policy shared across suites and repetitions.",
+      "properties": {
+        "timeout_ms": {
+          "default": 5000,
+          "minimum": 1,
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "allow_mutations": {
+          "default": false,
+          "title": "Allow Mutations",
+          "type": "boolean"
+        }
+      },
+      "title": "BenchmarkExecutionConfig",
+      "type": "object"
+    },
+    "BenchmarkRepetitionInput": {
+      "additionalProperties": false,
+      "description": "Frozen artifacts for one suite repetition.",
+      "properties": {
+        "repetition": {
+          "minimum": 1,
+          "title": "Repetition",
+          "type": "integer"
+        },
+        "cases": {
+          "minLength": 1,
+          "title": "Cases",
+          "type": "string"
+        },
+        "source_record": {
+          "minLength": 1,
+          "title": "Source Record",
+          "type": "string"
+        },
+        "composition_record": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Composition Record"
+        },
+        "pricing_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pricing Id"
+        }
+      },
+      "required": [
+        "repetition",
+        "cases",
+        "source_record"
+      ],
+      "title": "BenchmarkRepetitionInput",
+      "type": "object"
+    },
+    "BenchmarkReportConfig": {
+      "additionalProperties": false,
+      "description": "Comparison identifiers and destinations produced after all suites finish.",
+      "properties": {
+        "comparison_id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Comparison Id",
+          "type": "string"
+        },
+        "json_output": {
+          "minLength": 1,
+          "title": "Json Output",
+          "type": "string"
+        },
+        "markdown_output": {
+          "minLength": 1,
+          "title": "Markdown Output",
+          "type": "string"
+        }
+      },
+      "required": [
+        "comparison_id",
+        "json_output",
+        "markdown_output"
+      ],
+      "title": "BenchmarkReportConfig",
+      "type": "object"
+    },
+    "BenchmarkSuiteArm": {
+      "description": "Whether a suite contains only native cases or shared enhancements too.",
+      "enum": [
+        "native",
+        "enhanced"
+      ],
+      "title": "BenchmarkSuiteArm",
+      "type": "string"
+    },
+    "BenchmarkSuiteConfig": {
+      "additionalProperties": false,
+      "description": "One native or enhanced experiment arm.",
+      "properties": {
+        "suite_id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Suite Id",
+          "type": "string"
+        },
+        "arm": {
+          "$ref": "#/$defs/BenchmarkSuiteArm"
+        },
+        "inputs": {
+          "items": {
+            "$ref": "#/$defs/BenchmarkRepetitionInput"
+          },
+          "minItems": 1,
+          "title": "Inputs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "suite_id",
+        "arm",
+        "inputs"
+      ],
+      "title": "BenchmarkSuiteConfig",
+      "type": "object"
+    },
+    "TokenPricingSnapshot": {
+      "additionalProperties": false,
+      "description": "One explicit provider/model/rate-class price captured for an experiment.",
+      "properties": {
+        "pricing_id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Pricing Id",
+          "type": "string"
+        },
+        "provider": {
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "model": {
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "rate_class": {
+          "minLength": 1,
+          "title": "Rate Class",
+          "type": "string"
+        },
+        "currency": {
+          "const": "USD",
+          "default": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "unit_tokens": {
+          "default": 1000000,
+          "minimum": 1,
+          "title": "Unit Tokens",
+          "type": "integer"
+        },
+        "cached_input_usd_per_unit": {
+          "minimum": 0,
+          "title": "Cached Input Usd Per Unit",
+          "type": "number"
+        },
+        "uncached_input_usd_per_unit": {
+          "minimum": 0,
+          "title": "Uncached Input Usd Per Unit",
+          "type": "number"
+        },
+        "output_usd_per_unit": {
+          "minimum": 0,
+          "title": "Output Usd Per Unit",
+          "type": "number"
+        },
+        "effective_from": {
+          "format": "date-time",
+          "title": "Effective From",
+          "type": "string"
+        },
+        "captured_at": {
+          "format": "date-time",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "source_url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Source Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pricing_id",
+        "provider",
+        "model",
+        "rate_class",
+        "cached_input_usd_per_unit",
+        "uncached_input_usd_per_unit",
+        "output_usd_per_unit",
+        "effective_from",
+        "captured_at",
+        "source_url"
+      ],
+      "title": "TokenPricingSnapshot",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One reproducible benchmark matrix over paired suite repetitions.",
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "kind": {
+      "const": "BenchmarkConfig",
+      "title": "Kind",
+      "type": "string"
+    },
+    "benchmark_id": {
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "title": "Benchmark Id",
+      "type": "string"
+    },
+    "spec": {
+      "minLength": 1,
+      "title": "Spec",
+      "type": "string"
+    },
+    "repetitions": {
+      "items": {
+        "minimum": 1,
+        "type": "integer"
+      },
+      "minItems": 1,
+      "title": "Repetitions",
+      "type": "array"
+    },
+    "fault_ids": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9-]*$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Fault Ids",
+      "type": "array"
+    },
+    "endpoints": {
+      "$ref": "#/$defs/BenchmarkEndpoints"
+    },
+    "execution": {
+      "$ref": "#/$defs/BenchmarkExecutionConfig"
+    },
+    "pricing": {
+      "items": {
+        "$ref": "#/$defs/TokenPricingSnapshot"
+      },
+      "title": "Pricing",
+      "type": "array"
+    },
+    "suites": {
+      "items": {
+        "$ref": "#/$defs/BenchmarkSuiteConfig"
+      },
+      "minItems": 2,
+      "title": "Suites",
+      "type": "array"
+    },
+    "output_directory": {
+      "minLength": 1,
+      "title": "Output Directory",
+      "type": "string"
+    },
+    "report": {
+      "$ref": "#/$defs/BenchmarkReportConfig"
+    }
+  },
+  "required": [
+    "schema_version",
+    "kind",
+    "benchmark_id",
+    "spec",
+    "repetitions",
+    "fault_ids",
+    "endpoints",
+    "suites",
+    "output_directory",
+    "report"
+  ],
+  "title": "BenchmarkConfig",
+  "type": "object"
+}

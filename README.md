@@ -12,8 +12,9 @@ oracles.
 > metamorphic/lifecycle relations. Response fault injection, clean-versus-fault
 > orchestration, single-suite evaluation, and multi-repetition comparison
 > reports are implemented and exercised in a three-repetition, four-arm Demo
-> Items experiment. Docker Compose/CI packaging and an external PetClinic
-> benchmark remain to be implemented.
+> Items experiment. Docker Compose reproduces the two-service local test
+> environment; CI packaging and an external PetClinic benchmark remain to be
+> implemented.
 
 ## Experiment snapshot
 
@@ -78,6 +79,9 @@ the full interpretation.
 - A deterministic FastAPI response-fault proxy with pass-through mode,
   single-fault activation, bounded upstream responses, trigger counts, and
   status/JSON mutation operators.
+- A Docker Compose environment that builds one pinned Python/uv image, starts
+  the Demo Items API and fault proxy in dependency order, and exposes health
+  checks for both services.
 - A strict four-fault Demo Items catalog with reference tests proving that each
   fault is triggerable and produces an observable response difference.
 - Clean-versus-fault suite orchestration that resets the SUT, executes the same
@@ -96,6 +100,8 @@ the full interpretation.
 - A strict `BenchmarkConfig` YAML and `oate benchmark run --config` command that
   preflights every paired input before HTTP traffic, runs suites sequentially,
   preserves per-run artifacts, and writes the final comparison automatically.
+- Generated JSON Schema for `BenchmarkConfig`, so editors and external tools can
+  validate the same strict contract enforced by Pydantic.
 - `oate report compare` output in machine-readable JSON and human-readable
   Markdown, preserving every source evaluation ID for traceability.
 - `oate cases validate` and `oate cases run` commands with structural and
@@ -109,6 +115,8 @@ the full interpretation.
 
 - [uv](https://docs.astral.sh/uv/)
 - Python 3.12, installed and managed automatically by uv
+- Docker Desktop, or Docker Engine with the Compose plugin, for the
+  containerized test environment
 
 ## Setup
 
@@ -192,7 +200,22 @@ case IDs, and rejects any collision that remains after namespacing. It writes a
 counts plus canonical SHA-256 values. Run the same command with the Schemathesis
 batch to build the paired enhanced arm from identical shared cases.
 
-Start the Demo Items SUT and fault proxy in two separate terminals:
+Start the complete local test environment with Docker Compose:
+
+```bash
+docker compose up --build --wait
+```
+
+This builds one shared Python image, starts the Demo Items API on
+`127.0.0.1:8000`, waits for it to become healthy, and then starts the fault
+proxy on `127.0.0.1:8001`. Stop and remove the containers with:
+
+```bash
+docker compose down
+```
+
+For local development without Docker, start the Demo Items SUT and fault proxy
+in two separate terminals:
 
 ```bash
 uv run uvicorn services.demo_items.app:app --host 127.0.0.1 --port 8000
@@ -230,7 +253,20 @@ matrix can instead be run with one command while the same two services are up:
 
 ```bash
 uv run oate benchmark run \
-  --config benchmarks/demo_items/final-four-arm-v5.yaml
+  --config benchmarks/demo_items/frozen/v5/benchmark.yaml
+```
+
+The exact sanitized inputs used for the published result are checked in under
+`benchmarks/demo_items/frozen/v5/`. Replaying this benchmark does not call
+DeepSeek and does not require an API key; it executes the frozen DeepSeek and
+Schemathesis cases through the current runner. Regenerating new DeepSeek cases
+is a separate, intentionally non-deterministic operation.
+
+Export the benchmark configuration contract for editor integration or external
+validation:
+
+```bash
+uv run oate benchmark schema --out schemas/benchmark-config.schema.json
 ```
 
 Paths inside the config are resolved relative to the config file. Every suite

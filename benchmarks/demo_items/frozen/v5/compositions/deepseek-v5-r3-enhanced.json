@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "kind": "SuiteCompositionRecord",
+  "composition_id": "deepseek-v5-r3-enhanced",
+  "base_batch": {
+    "case_count": 15,
+    "sha256": "8a78eac41a4b70edf0b94ef831bacc3873ce2ce91680b18652bcb805ca876130"
+  },
+  "enhancements": [
+    {
+      "pack_id": "shared-relations",
+      "batch": {
+        "case_count": 7,
+        "sha256": "c1aaf20723f10403d13cebcde689a5e92f2958968a66f7e48863b0ef52657a10"
+      }
+    }
+  ],
+  "composed_batch": {
+    "case_count": 22,
+    "sha256": "316f631f4dd09595e427a1a435b632dab26b7f4403d818ed7a0e02859bf671e4"
+  }
+}

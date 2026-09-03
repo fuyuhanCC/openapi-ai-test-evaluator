@@ -1,0 +1,109 @@
+# yaml-language-server: $schema=../../../../schemas/benchmark-config.schema.json
+schema_version: "1.0"
+kind: BenchmarkConfig
+benchmark_id: demo-items-four-arm-v5
+spec: ../../../../examples/demo-items/openapi.yaml
+repetitions: [1, 2, 3]
+fault_ids:
+  - get-id-as-string
+  - get-missing-name
+  - get-status-error
+  - list-duplicate-first-item
+endpoints:
+  runner_base_url: http://127.0.0.1:8001
+  proxy_control_url: http://127.0.0.1:8001
+  sut_reset_url: http://127.0.0.1:8000/__test__/reset
+execution:
+  timeout_ms: 5000
+  allow_mutations: true
+pricing:
+  - pricing_id: deepseek-v4-flash-2026-08-peak
+    provider: deepseek
+    model: deepseek-v4-flash
+    rate_class: peak
+    currency: USD
+    unit_tokens: 1000000
+    cached_input_usd_per_unit: 0.014
+    uncached_input_usd_per_unit: 0.44
+    output_usd_per_unit: 1.32
+    effective_from: 2026-08-16T16:00:00Z
+    captured_at: 2026-09-01T02:34:07Z
+    source_url: https://api-docs.deepseek.com/quick_start/pricing/
+  - pricing_id: deepseek-v4-flash-2026-08-off-peak
+    provider: deepseek
+    model: deepseek-v4-flash
+    rate_class: off-peak
+    currency: USD
+    unit_tokens: 1000000
+    cached_input_usd_per_unit: 0.007
+    uncached_input_usd_per_unit: 0.22
+    output_usd_per_unit: 0.66
+    effective_from: 2026-08-16T16:00:00Z
+    captured_at: 2026-09-01T02:34:07Z
+    source_url: https://api-docs.deepseek.com/quick_start/pricing/
+suites:
+  - suite_id: deepseek-native
+    arm: native
+    inputs:
+      - repetition: 1
+        cases: cases/deepseek-v5-r1.json
+        source_record: generations/deepseek-v5-r1.json
+        pricing_id: deepseek-v4-flash-2026-08-peak
+      - repetition: 2
+        cases: cases/deepseek-v5-r2.json
+        source_record: generations/deepseek-v5-r2.json
+        pricing_id: deepseek-v4-flash-2026-08-peak
+      - repetition: 3
+        cases: cases/deepseek-v5-r3.json
+        source_record: generations/deepseek-v5-r3.json
+        pricing_id: deepseek-v4-flash-2026-08-off-peak
+  - suite_id: deepseek-enhanced
+    arm: enhanced
+    inputs:
+      - repetition: 1
+        cases: cases/deepseek-v5-r1-enhanced.json
+        source_record: generations/deepseek-v5-r1.json
+        composition_record: compositions/deepseek-v5-r1-enhanced.json
+        pricing_id: deepseek-v4-flash-2026-08-peak
+      - repetition: 2
+        cases: cases/deepseek-v5-r2-enhanced.json
+        source_record: generations/deepseek-v5-r2.json
+        composition_record: compositions/deepseek-v5-r2-enhanced.json
+        pricing_id: deepseek-v4-flash-2026-08-peak
+      - repetition: 3
+        cases: cases/deepseek-v5-r3-enhanced.json
+        source_record: generations/deepseek-v5-r3.json
+        composition_record: compositions/deepseek-v5-r3-enhanced.json
+        pricing_id: deepseek-v4-flash-2026-08-off-peak
+  - suite_id: schemathesis-native
+    arm: native
+    inputs:
+      - repetition: 1
+        cases: cases/schemathesis-r1.json
+        source_record: adaptations/schemathesis-r1.json
+      - repetition: 2
+        cases: cases/schemathesis-r2.json
+        source_record: adaptations/schemathesis-r2.json
+      - repetition: 3
+        cases: cases/schemathesis-r3.json
+        source_record: adaptations/schemathesis-r3.json
+  - suite_id: schemathesis-enhanced
+    arm: enhanced
+    inputs:
+      - repetition: 1
+        cases: cases/schemathesis-r1-enhanced.json
+        source_record: adaptations/schemathesis-r1.json
+        composition_record: compositions/schemathesis-r1-enhanced.json
+      - repetition: 2
+        cases: cases/schemathesis-r2-enhanced.json
+        source_record: adaptations/schemathesis-r2.json
+        composition_record: compositions/schemathesis-r2-enhanced.json
+      - repetition: 3
+        cases: cases/schemathesis-r3-enhanced.json
+        source_record: adaptations/schemathesis-r3.json
+        composition_record: compositions/schemathesis-r3-enhanced.json
+output_directory: ../../../../artifacts/runs/demo-items-four-arm-v5
+report:
+  comparison_id: demo-items-four-arm-v5
+  json_output: ../../../../artifacts/reports/demo-items-four-arm-v5.json
+  markdown_output: ../../../../artifacts/reports/demo-items-four-arm-v5.md

@@ -30,10 +30,12 @@ The experiment asks two separate questions:
   request metrics are both reported.
 
 The checked-in benchmark definition is
-[`benchmarks/demo_items/final-four-arm-v5.yaml`](../../benchmarks/demo_items/final-four-arm-v5.yaml).
-It references frozen generation artifacts that are kept out of Git, so the
-exact run currently requires those local inputs. A portable benchmark bundle is
-still future packaging work.
+[`benchmarks/demo_items/frozen/v5/benchmark.yaml`](../../benchmarks/demo_items/frozen/v5/benchmark.yaml).
+It references the sanitized, checked-in inputs under
+[`benchmarks/demo_items/frozen/v5/`](../../benchmarks/demo_items/frozen/v5/),
+so the exact case execution and evaluation can be replayed without calling
+DeepSeek. A new provider generation is intentionally treated as a new
+repetition rather than as a bit-for-bit reproduction.
 
 ## Results
 

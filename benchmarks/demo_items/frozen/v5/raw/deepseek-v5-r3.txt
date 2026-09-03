@@ -1,0 +1,948 @@
+{
+  "schema_version": "1.0",
+  "cases": [
+    {
+      "id": "create-get-item",
+      "name": "Create an item and retrieve it",
+      "steps": [
+        {
+          "id": "create-item",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "conformant",
+            "body": {
+              "name": "Test Item",
+              "price": 10.5,
+              "status": "active",
+              "category": "test"
+            }
+          },
+          "extract": [
+            {
+              "variable": "item_id",
+              "source": "response.body",
+              "pointer": "/id"
+            }
+          ],
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 201
+            },
+            {
+              "operator": "schema_matches"
+            }
+          ]
+        },
+        {
+          "id": "get-item",
+          "operation_id": "getItem",
+          "request": {
+            "mode": "conformant",
+            "path": {
+              "itemId": {
+                "$var": "item_id"
+              }
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 200
+            },
+            {
+              "operator": "schema_matches"
+            },
+            {
+              "operator": "equals",
+              "actual": {
+                "source": "response.body",
+                "pointer": "/name"
+              },
+              "expected": "Test Item"
+            }
+          ]
+        }
+      ],
+      "relations": [
+        {
+          "id": "create-read-consistency",
+          "type": "create_read_consistency",
+          "source_step": "create-item",
+          "follow_up_step": "get-item",
+          "field_pairs": [
+            {
+              "source": {
+                "location": "response.body",
+                "pointer": "/id"
+              },
+              "follow_up": {
+                "location": "response.body",
+                "pointer": "/id"
+              }
+            },
+            {
+              "source": {
+                "location": "response.body",
+                "pointer": "/name"
+              },
+              "follow_up": {
+                "location": "response.body",
+                "pointer": "/name"
+              }
+            },
+            {
+              "source": {
+                "location": "response.body",
+                "pointer": "/price"
+              },
+              "follow_up": {
+                "location": "response.body",
+                "pointer": "/price"
+              }
+            },
+            {
+              "source": {
+                "location": "response.body",
+                "pointer": "/status"
+              },
+              "follow_up": {
+                "location": "response.body",
+                "pointer": "/status"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "update-item",
+      "name": "Update an item partially",
+      "setup": [
+        {
+          "id": "create-item",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "conformant",
+            "body": {
+              "name": "Original",
+              "price": 5,
+              "status": "active"
+            }
+          },
+          "extract": [
+            {
+              "variable": "item_id",
+              "source": "response.body",
+              "pointer": "/id"
+            }
+          ],
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 201
+            }
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "update-item",
+          "operation_id": "updateItem",
+          "request": {
+            "mode": "conformant",
+            "path": {
+              "itemId": {
+                "$var": "item_id"
+              }
+            },
+            "body": {
+              "name": "Updated"
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 200
+            },
+            {
+              "operator": "schema_matches"
+            },
+            {
+              "operator": "equals",
+              "actual": {
+                "source": "response.body",
+                "pointer": "/name"
+              },
+              "expected": "Updated"
+            }
+          ]
+        }
+      ],
+      "relations": [
+        {
+          "id": "update-read-consistency",
+          "type": "update_read_consistency",
+          "source_step": "update-item",
+          "follow_up_step": "update-item",
+          "field_pairs": [
+            {
+              "source": {
+                "location": "response.body",
+                "pointer": "/name"
+              },
+              "follow_up": {
+                "location": "response.body",
+                "pointer": "/name"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "delete-item",
+      "name": "Delete an item and verify it is gone",
+      "setup": [
+        {
+          "id": "create-item",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "conformant",
+            "body": {
+              "name": "To Delete",
+              "price": 1,
+              "status": "inactive"
+            }
+          },
+          "extract": [
+            {
+              "variable": "item_id",
+              "source": "response.body",
+              "pointer": "/id"
+            }
+          ],
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 201
+            }
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "delete-item",
+          "operation_id": "deleteItem",
+          "request": {
+            "mode": "conformant",
+            "path": {
+              "itemId": {
+                "$var": "item_id"
+              }
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 204
+            }
+          ]
+        },
+        {
+          "id": "get-deleted-item",
+          "operation_id": "getItem",
+          "request": {
+            "mode": "conformant",
+            "path": {
+              "itemId": {
+                "$var": "item_id"
+              }
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 404
+            }
+          ]
+        }
+      ],
+      "relations": [
+        {
+          "id": "delete-read-consistency",
+          "type": "delete_read_consistency",
+          "source_step": "delete-item",
+          "follow_up_step": "get-deleted-item",
+          "field_pairs": []
+        }
+      ]
+    },
+    {
+      "id": "list-items-pagination",
+      "name": "List items with pagination",
+      "steps": [
+        {
+          "id": "list-first-page",
+          "operation_id": "listItems",
+          "request": {
+            "mode": "conformant",
+            "query": [
+              {
+                "name": "limit",
+                "value": 2
+              },
+              {
+                "name": "offset",
+                "value": 0
+              }
+            ]
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 200
+            },
+            {
+              "operator": "schema_matches"
+            }
+          ]
+        },
+        {
+          "id": "list-second-page",
+          "operation_id": "listItems",
+          "request": {
+            "mode": "conformant",
+            "query": [
+              {
+                "name": "limit",
+                "value": 2
+              },
+              {
+                "name": "offset",
+                "value": 2
+              }
+            ]
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 200
+            },
+            {
+              "operator": "schema_matches"
+            }
+          ]
+        }
+      ],
+      "relations": [
+        {
+          "id": "pagination-monotonicity",
+          "type": "pagination_monotonicity",
+          "source_step": "list-first-page",
+          "follow_up_step": "list-second-page",
+          "collection_pointer": "/items",
+          "item_key_pointer": "/id",
+          "mode": "prefix",
+          "page_size_parameter": "limit"
+        }
+      ]
+    },
+    {
+      "id": "invalid-create-missing-name",
+      "name": "Create item with missing required name",
+      "steps": [
+        {
+          "id": "create-invalid",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "intentionally_invalid",
+            "expected_violations": [
+              {
+                "code": "missing_required",
+                "location": "body",
+                "field": "name"
+              }
+            ],
+            "body": {
+              "price": 10,
+              "status": "active"
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "invalid-create-negative-price",
+      "name": "Create item with negative price",
+      "steps": [
+        {
+          "id": "create-invalid",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "intentionally_invalid",
+            "expected_violations": [
+              {
+                "code": "out_of_range",
+                "location": "body",
+                "field": "price"
+              }
+            ],
+            "body": {
+              "name": "Invalid",
+              "price": -1,
+              "status": "active"
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "invalid-create-invalid-status",
+      "name": "Create item with invalid status enum",
+      "steps": [
+        {
+          "id": "create-invalid",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "intentionally_invalid",
+            "expected_violations": [
+              {
+                "code": "invalid_enum",
+                "location": "body",
+                "field": "status"
+              }
+            ],
+            "body": {
+              "name": "Invalid",
+              "price": 10,
+              "status": "unknown"
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "invalid-get-negative-id",
+      "name": "Get item with negative id",
+      "steps": [
+        {
+          "id": "get-invalid",
+          "operation_id": "getItem",
+          "request": {
+            "mode": "intentionally_invalid",
+            "expected_violations": [
+              {
+                "code": "out_of_range",
+                "location": "path",
+                "field": "itemId"
+              }
+            ],
+            "path": {
+              "itemId": -1
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "invalid-list-limit-too-large",
+      "name": "List items with limit above maximum",
+      "steps": [
+        {
+          "id": "list-invalid",
+          "operation_id": "listItems",
+          "request": {
+            "mode": "intentionally_invalid",
+            "expected_violations": [
+              {
+                "code": "out_of_range",
+                "location": "query",
+                "field": "limit"
+              }
+            ],
+            "query": [
+              {
+                "name": "limit",
+                "value": 101
+              }
+            ]
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "invalid-list-empty-category",
+      "name": "List items with empty category",
+      "steps": [
+        {
+          "id": "list-invalid",
+          "operation_id": "listItems",
+          "request": {
+            "mode": "intentionally_invalid",
+            "expected_violations": [
+              {
+                "code": "schema_mismatch",
+                "location": "query",
+                "field": "category"
+              }
+            ],
+            "query": [
+              {
+                "name": "category",
+                "value": ""
+              }
+            ]
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "replace-item",
+      "name": "Replace an item completely",
+      "setup": [
+        {
+          "id": "create-item",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "conformant",
+            "body": {
+              "name": "Old",
+              "price": 1,
+              "status": "active"
+            }
+          },
+          "extract": [
+            {
+              "variable": "item_id",
+              "source": "response.body",
+              "pointer": "/id"
+            }
+          ],
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 201
+            }
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "replace-item",
+          "operation_id": "replaceItem",
+          "request": {
+            "mode": "conformant",
+            "path": {
+              "itemId": {
+                "$var": "item_id"
+              }
+            },
+            "body": {
+              "name": "New",
+              "price": 20,
+              "status": "inactive",
+              "category": "replacement"
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 200
+            },
+            {
+              "operator": "schema_matches"
+            },
+            {
+              "operator": "equals",
+              "actual": {
+                "source": "response.body",
+                "pointer": "/name"
+              },
+              "expected": "New"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "boundary-create-max-name",
+      "name": "Create item with name at max length",
+      "steps": [
+        {
+          "id": "create-boundary",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "conformant",
+            "body": {
+              "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "price": 0,
+              "status": "active"
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 201
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "boundary-create-min-price",
+      "name": "Create item with price at minimum",
+      "steps": [
+        {
+          "id": "create-boundary",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "conformant",
+            "body": {
+              "name": "Cheap",
+              "price": 0,
+              "status": "active"
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 201
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "boundary-list-limit-min",
+      "name": "List items with limit at minimum",
+      "steps": [
+        {
+          "id": "list-boundary",
+          "operation_id": "listItems",
+          "request": {
+            "mode": "conformant",
+            "query": [
+              {
+                "name": "limit",
+                "value": 1
+              }
+            ]
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 200
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "boundary-list-offset-min",
+      "name": "List items with offset at minimum",
+      "steps": [
+        {
+          "id": "list-boundary",
+          "operation_id": "listItems",
+          "request": {
+            "mode": "conformant",
+            "query": [
+              {
+                "name": "offset",
+                "value": 0
+              }
+            ]
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 200
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "invalid-update-empty-body",
+      "name": "Update item with empty body",
+      "setup": [
+        {
+          "id": "create-item",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "conformant",
+            "body": {
+              "name": "Temp",
+              "price": 1,
+              "status": "active"
+            }
+          },
+          "extract": [
+            {
+              "variable": "item_id",
+              "source": "response.body",
+              "pointer": "/id"
+            }
+          ],
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 201
+            }
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "update-invalid",
+          "operation_id": "updateItem",
+          "request": {
+            "mode": "intentionally_invalid",
+            "expected_violations": [
+              {
+                "code": "schema_mismatch",
+                "location": "body",
+                "field": ""
+              }
+            ],
+            "path": {
+              "itemId": {
+                "$var": "item_id"
+              }
+            },
+            "body": {}
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "invalid-replace-missing-name",
+      "name": "Replace item with missing name",
+      "setup": [
+        {
+          "id": "create-item",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "conformant",
+            "body": {
+              "name": "Temp",
+              "price": 1,
+              "status": "active"
+            }
+          },
+          "extract": [
+            {
+              "variable": "item_id",
+              "source": "response.body",
+              "pointer": "/id"
+            }
+          ],
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 201
+            }
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "replace-invalid",
+          "operation_id": "replaceItem",
+          "request": {
+            "mode": "intentionally_invalid",
+            "expected_violations": [
+              {
+                "code": "missing_required",
+                "location": "body",
+                "field": "name"
+              }
+            ],
+            "path": {
+              "itemId": {
+                "$var": "item_id"
+              }
+            },
+            "body": {
+              "price": 10,
+              "status": "active"
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "invalid-delete-zero-id",
+      "name": "Delete item with id zero",
+      "steps": [
+        {
+          "id": "delete-invalid",
+          "operation_id": "deleteItem",
+          "request": {
+            "mode": "intentionally_invalid",
+            "expected_violations": [
+              {
+                "code": "out_of_range",
+                "location": "path",
+                "field": "itemId"
+              }
+            ],
+            "path": {
+              "itemId": 0
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "invalid-list-status-invalid",
+      "name": "List items with invalid status",
+      "steps": [
+        {
+          "id": "list-invalid",
+          "operation_id": "listItems",
+          "request": {
+            "mode": "intentionally_invalid",
+            "expected_violations": [
+              {
+                "code": "invalid_enum",
+                "location": "query",
+                "field": "status"
+              }
+            ],
+            "query": [
+              {
+                "name": "status",
+                "value": "unknown"
+              }
+            ]
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "invalid-create-additional-property",
+      "name": "Create item with additional property",
+      "steps": [
+        {
+          "id": "create-invalid",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "intentionally_invalid",
+            "expected_violations": [
+              {
+                "code": "additional_property",
+                "location": "body",
+                "field": "extra"
+              }
+            ],
+            "body": {
+              "name": "Invalid",
+              "price": 10,
+              "status": "active",
+              "extra": "value"
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "invalid-create-type-mismatch",
+      "name": "Create item with wrong type for price",
+      "steps": [
+        {
+          "id": "create-invalid",
+          "operation_id": "createItem",
+          "request": {
+            "mode": "intentionally_invalid",
+            "expected_violations": [
+              {
+                "code": "type_mismatch",
+                "location": "body",
+                "field": "price"
+              }
+            ],
+            "body": {
+              "name": "Invalid",
+              "price": "ten",
+              "status": "active"
+            }
+          },
+          "assertions": [
+            {
+              "operator": "status_is",
+              "expected": 400
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "kind": "GenerationRecord",
+  "generation_id": "deepseek-v5-r2",
+  "provider": "deepseek",
+  "model": "deepseek-v4-flash",
+  "prompt_version": "api-cases-v5",
+  "provider_request_id": "92979e27-9353-4c35-b173-51715463705d",
+  "finish_reason": "stop",
+  "started_at": "2026-08-31T03:22:30.697197Z",
+  "finished_at": "2026-08-31T03:22:51.588342Z",
+  "duration_ms": 20890,
+  "status": "succeeded",
+  "request_count": 1,
+  "token_usage": {
+    "input_tokens": 4760,
+    "output_tokens": 4659,
+    "total_tokens": 9419,
+    "cached_input_tokens": 4736,
+    "reasoning_tokens": 0
+  },
+  "estimated_cost_usd": null,
+  "case_admission": {
+    "received_case_count": 21,
+    "admitted_case_count": 18,
+    "rejected_case_count": 3,
+    "rejections": [
+      {
+        "index": 12,
+        "case_id": "list-items-empty-category",
+        "stage": "semantic",
+        "code": "case_semantics_invalid",
+        "detail_codes": [
+          "false_expected_violation",
+          "undeclared_request_violation"
+        ]
+      },
+      {
+        "index": 16,
+        "case_id": "update-item-invalid-empty-body",
+        "stage": "structure",
+        "code": "case_structure_invalid",
+        "detail_codes": [
+          "string_too_short"
+        ]
+      },
+      {
+        "index": 20,
+        "case_id": "update-read-consistency",
+        "stage": "limit",
+        "code": "case_count_limit_exceeded",
+        "detail_codes": []
+      }
+    ]
+  },
+  "error": null
+}

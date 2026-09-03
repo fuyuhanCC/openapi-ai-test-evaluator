@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from schemathesis.errors import SchemathesisError
 
 from openapi_ai_test_evaluator.domain import (
+    BenchmarkConfig,
     GenerationConfig,
     GenerationRecord,
     OpenAPISpec,
@@ -98,6 +99,20 @@ class GenerationProviderChoice(StrEnum):
 
 class BaselineToolChoice(StrEnum):
     SCHEMATHESIS = "schemathesis"
+
+
+@benchmark_app.command("schema")
+def export_benchmark_schema(
+    out: Annotated[
+        Path,
+        typer.Option("--out", file_okay=True, dir_okay=False),
+    ] = Path("schemas/benchmark-config.schema.json"),
+) -> None:
+    """Export the JSON Schema generated from the BenchmarkConfig contract."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    schema = BenchmarkConfig.model_json_schema()
+    out.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
+    typer.echo(f"Wrote BenchmarkConfig schema: {out}")
 
 
 @benchmark_app.command("run")

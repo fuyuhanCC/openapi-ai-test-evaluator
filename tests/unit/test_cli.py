@@ -429,9 +429,7 @@ def test_cases_validate_reports_counts() -> None:
 
 def test_cases_compose_writes_merged_batch_and_provenance_record(tmp_path: Path) -> None:
     base_path = ROOT / "examples" / "cases" / "minimal-get.yaml"
-    enhancement_path = (
-        ROOT / "benchmarks" / "demo_items" / "enhancements" / "shared-relations.yaml"
-    )
+    enhancement_path = ROOT / "benchmarks" / "demo_items" / "enhancements" / "shared-relations.yaml"
     cases_output = tmp_path / "cases" / "augmented.json"
     record_output = tmp_path / "compositions" / "augmented.json"
 
@@ -474,9 +472,7 @@ def test_cases_compose_writes_merged_batch_and_provenance_record(tmp_path: Path)
 
 def test_cases_compose_requires_one_pack_id_per_enhancement(tmp_path: Path) -> None:
     base_path = ROOT / "examples" / "cases" / "minimal-get.yaml"
-    enhancement_path = (
-        ROOT / "benchmarks" / "demo_items" / "enhancements" / "shared-relations.yaml"
-    )
+    enhancement_path = ROOT / "benchmarks" / "demo_items" / "enhancements" / "shared-relations.yaml"
 
     result = runner.invoke(
         app,
@@ -507,9 +503,7 @@ def test_cases_compose_requires_one_pack_id_per_enhancement(tmp_path: Path) -> N
 
 def test_cases_compose_refuses_to_overwrite_existing_outputs(tmp_path: Path) -> None:
     base_path = ROOT / "examples" / "cases" / "minimal-get.yaml"
-    enhancement_path = (
-        ROOT / "benchmarks" / "demo_items" / "enhancements" / "shared-relations.yaml"
-    )
+    enhancement_path = ROOT / "benchmarks" / "demo_items" / "enhancements" / "shared-relations.yaml"
     cases_output = tmp_path / "cases.json"
     record_output = tmp_path / "record.json"
     cases_output.write_text("keep-me", encoding="utf-8")
@@ -815,6 +809,17 @@ def test_plan_schema_writes_generated_schema(tmp_path: Path) -> None:
     assert result.exit_code == 0
     schema = json.loads(output_path.read_text(encoding="utf-8"))
     assert schema["title"] == "TestPlan"
+
+
+def test_benchmark_schema_writes_generated_schema(tmp_path: Path) -> None:
+    output_path = tmp_path / "benchmark-config.schema.json"
+
+    result = runner.invoke(app, ["benchmark", "schema", "--out", str(output_path)])
+
+    assert result.exit_code == 0
+    schema = json.loads(output_path.read_text(encoding="utf-8"))
+    assert schema["title"] == "BenchmarkConfig"
+    assert schema["additionalProperties"] is False
 
 
 def test_run_command_emits_and_writes_complete_json(

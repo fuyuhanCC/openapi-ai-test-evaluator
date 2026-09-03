@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "kind": "AdaptationRecord",
+  "tool": "schemathesis",
+  "tool_version": "4.25.2",
+  "adapter_version": "schemathesis-case-v1",
+  "seed": 8,
+  "duration_ms": 309,
+  "received_case_count": 296,
+  "adapted_case_count": 220,
+  "rejected_case_count": 76,
+  "skip_reasons": [
+    {
+      "code": "method_mismatch",
+      "detail_code": null,
+      "count": 10
+    },
+    {
+      "code": "positive_request_invalid",
+      "detail_code": null,
+      "count": 45
+    },
+    {
+      "code": "request_semantics_unsupported",
+      "detail_code": "unknown_parameter",
+      "count": 4
+    },
+    {
+      "code": "request_semantics_unsupported",
+      "detail_code": "unsupported_parameter_serialization",
+      "count": 9
+    },
+    {
+      "code": "value_not_json",
+      "detail_code": null,
+      "count": 8
+    }
+  ]
+}

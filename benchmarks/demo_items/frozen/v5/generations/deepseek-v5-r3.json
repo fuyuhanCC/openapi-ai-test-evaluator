@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "kind": "GenerationRecord",
+  "generation_id": "deepseek-v5-r3",
+  "provider": "deepseek",
+  "model": "deepseek-v4-flash",
+  "prompt_version": "api-cases-v5",
+  "provider_request_id": "e1a95618-c5a8-4d15-be2b-bc181adafed1",
+  "finish_reason": "stop",
+  "started_at": "2026-08-31T12:08:12.254343Z",
+  "finished_at": "2026-08-31T12:08:34.478956Z",
+  "duration_ms": 22224,
+  "status": "succeeded",
+  "request_count": 1,
+  "token_usage": {
+    "input_tokens": 4760,
+    "output_tokens": 4882,
+    "total_tokens": 9642,
+    "cached_input_tokens": 4736,
+    "reasoning_tokens": 0
+  },
+  "estimated_cost_usd": null,
+  "case_admission": {
+    "received_case_count": 21,
+    "admitted_case_count": 15,
+    "rejected_case_count": 6,
+    "rejections": [
+      {
+        "index": 1,
+        "case_id": "update-item",
+        "stage": "semantic",
+        "code": "case_semantics_invalid",
+        "detail_codes": [
+          "relation_method_mismatch",
+          "relation_step_order_invalid"
+        ]
+      },
+      {
+        "index": 2,
+        "case_id": "delete-item",
+        "stage": "structure",
+        "code": "case_structure_invalid",
+        "detail_codes": [
+          "value_error"
+        ]
+      },
+      {
+        "index": 3,
+        "case_id": "list-items-pagination",
+        "stage": "semantic",
+        "code": "case_semantics_invalid",
+        "detail_codes": [
+          "relation_pagination_context_mismatch",
+          "relation_pagination_size_invalid"
+        ]
+      },
+      {
+        "index": 9,
+        "case_id": "invalid-list-empty-category",
+        "stage": "semantic",
+        "code": "case_semantics_invalid",
+        "detail_codes": [
+          "false_expected_violation",
+          "undeclared_request_violation"
+        ]
+      },
+      {
+        "index": 15,
+        "case_id": "invalid-update-empty-body",
+        "stage": "structure",
+        "code": "case_structure_invalid",
+        "detail_codes": [
+          "string_too_short"
+        ]
+      },
+      {
+        "index": 20,
+        "case_id": "invalid-create-type-mismatch",
+        "stage": "limit",
+        "code": "case_count_limit_exceeded",
+        "detail_codes": []
+      }
+    ]
+  },
+  "error": null
+}

@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "kind": "SuiteCompositionRecord",
+  "composition_id": "schemathesis-r1-enhanced",
+  "base_batch": {
+    "case_count": 226,
+    "sha256": "cf3fffc45b217fa4c97bac6024fb3f2d50175d78784e7060d4e4ab4c00708991"
+  },
+  "enhancements": [
+    {
+      "pack_id": "shared-relations",
+      "batch": {
+        "case_count": 7,
+        "sha256": "c1aaf20723f10403d13cebcde689a5e92f2958968a66f7e48863b0ef52657a10"
+      }
+    }
+  ],
+  "composed_batch": {
+    "case_count": 233,
+    "sha256": "c7f592ab2042a400bf917e85bc4529657b7d0f19f9d2a184a756998a3df2864d"
+  }
+}

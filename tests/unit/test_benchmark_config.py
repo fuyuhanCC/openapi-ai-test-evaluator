@@ -100,7 +100,7 @@ def test_loads_the_demo_four_arm_config() -> None:
 
 def test_loads_final_config_with_explicit_repetition_pricing() -> None:
     config = load_benchmark_config(
-        ROOT / "benchmarks/demo_items/final-four-arm-v5.yaml"
+        ROOT / "benchmarks/demo_items/frozen/v5/benchmark.yaml"
     )
 
     assert {snapshot.rate_class for snapshot in config.pricing} == {"peak", "off-peak"}

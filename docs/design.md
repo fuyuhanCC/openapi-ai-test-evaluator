@@ -5,9 +5,9 @@
 | Field | Value |
 | --- | --- |
 | Status | V1 implementation in progress |
-| Version | 1.1 |
-| Last updated | 2026-08-27 |
-| Primary benchmark | Spring PetClinic REST |
+| Version | 1.2 |
+| Last updated | 2026-09-02 |
+| Primary benchmark | Demo Items (controlled); Spring PetClinic REST planned as external validation |
 | LLM providers | Extensible provider interface; DeepSeek implemented first |
 | Conventional baseline | Schemathesis stateless adapter implemented |
 
@@ -29,8 +29,9 @@ cannot be represented without losing meaning are kept as secondary external
 baselines and mapped into the same evaluation metrics instead of being falsely
 presented as identical cases.
 
-The framework is not tied to PetClinic. PetClinic is the first reference system
-under test (SUT) and benchmark used to produce reproducible V1 results.
+The framework is not tied to one target application. Demo Items is the first
+controlled system under test (SUT) used to exercise the complete experiment;
+Spring PetClinic REST is planned as an external validation benchmark.
 
 ## 2. Project Positioning
 
@@ -39,8 +40,9 @@ framework**, not a hosted testing platform.
 
 It is intended to answer three questions:
 
-1. Can an LLM generate more effective executable API tests than a mature
-   schema-driven baseline under the same API, fault set, and execution budget?
+1. How do LLM-generated executable API tests compare with a mature
+   schema-driven baseline under the same API, fault set, runner, and evaluator,
+   while keeping unequal suite sizes and request counts visible?
 2. How much additional fault-detection capability comes from metamorphic test
    expansion?
 3. What are the cost, latency, validity, and stability trade-offs of the
@@ -64,7 +66,8 @@ V1 will:
 7. Support three explicit metamorphic relations and three lifecycle consistency
    checks.
 8. Inject deterministic response faults through a reusable HTTP fault proxy.
-9. Run a four-arm controlled experiment against PetClinic.
+9. Run a four-arm controlled experiment against Demo Items and repeat the
+   protocol against PetClinic for external validation.
 10. Produce machine-readable and human-readable evaluation artifacts.
 11. Provide reproducible local and CI workflows with uv, Docker Compose, and
     GitHub Actions.
@@ -233,13 +236,16 @@ Implemented as of 2026-08-27:
 - Paired multi-suite/repetition aggregation with raw and normalized metrics,
   missing-value accounting, per-fault stability, and deterministic JSON and
   Markdown report output through `oate report compare`.
+- A Docker Compose environment for the Demo Items API and fault proxy, using a
+  shared pinned Python/uv image, dependency-aware startup, and service health
+  checks.
 - Legacy hand-authored `TestPlan` validation and execution compatibility.
 
 Still required for the V1 experiment:
 
 - PetClinic benchmark packaging and deterministic reset workflow.
 - PetClinic fault catalog and reference trigger/observability tests.
-- Top-level benchmark orchestration, Docker Compose, and CI workflows.
+- CI workflows, including a Docker build and health-check smoke test.
 
 ## 8. Core Data Contracts
 
@@ -1174,12 +1180,14 @@ The manifest records:
 - Start and finish timestamps.
 
 Secrets and unredacted authorization values are never stored in artifacts.
-Current manual generation commands write the validated cases, generation
-record, and raw output to three caller-selected paths. The benchmark
-orchestrator will copy those immutable inputs into the run-scoped layout above.
-The single-suite pipeline already writes the `execution/` and `evaluation/`
-subtrees; the future top-level benchmark command will add the manifest,
-generation inputs, repetition loop, and final comparison reports.
+Generation commands write the validated cases, generation record, and raw
+output to three caller-selected paths. The configured benchmark orchestrator
+preflights frozen input references, runs every suite repetition, writes the
+`execution/` and `evaluation/` subtrees, and produces final JSON and Markdown
+comparison reports. The published Demo Items configuration references a
+sanitized, checked-in frozen input bundle so its execution and evaluation can
+be replayed without another provider call. A complete environment manifest
+remains future work.
 
 ## 17. Command-line Interface
 
@@ -1199,6 +1207,7 @@ oate benchmark run-suite --spec <openapi-file> --cases <cases> \
   --source-record <generation-or-adaptation-record> [...] \
   [--composition-record <composition-record>] \
   --output-directory <suite-repetition-directory>
+oate benchmark schema --out <benchmark-config-schema-json>
 oate benchmark run --config <benchmark-config>
 oate report compare --evaluation <evaluation-json> [...] \
   --json-output <comparison-json> --markdown-output <comparison-markdown>
@@ -1207,7 +1216,8 @@ oate report compare --evaluation <evaluation-json> [...] \
 Command output is concise for humans and supports JSON mode for CI.
 `oate cases generate`, `oate cases generate-baseline`, `oate cases validate`,
 `oate cases run`, `oate plan validate`, `oate plan schema`, `oate run`,
-`oate benchmark run-suite`, `oate benchmark run --config`, and
+`oate benchmark run-suite`, `oate benchmark schema`,
+`oate benchmark run --config`, and
 `oate report compare` are currently implemented. The configured command
 preflights all suite artifacts before opening the transport, executes every
 suite repetition sequentially, preserves its raw/evaluation artifacts, and
@@ -1236,10 +1246,12 @@ services/
 └── fault_proxy/
 
 benchmarks/
-└── petclinic/
-    ├── config/
+└── demo_items/
+    ├── enhancements/
     ├── faults/
-    └── reference_tests/
+    └── frozen/v5/
+        ├── benchmark.yaml
+        └── cases/
 
 tests/
 ├── unit/
@@ -1249,6 +1261,8 @@ tests/
 docs/
 examples/
 artifacts/
+Dockerfile
+compose.yaml
 ```
 
 Benchmark-specific code and data must depend on the framework, never the other
@@ -1290,8 +1304,10 @@ provider. Provider behavior is tested with recorded or mocked responses.
 
 ### 20.3 End-to-end tests
 
-Docker Compose starts PetClinic and the fault proxy for lifecycle, fault
-activation, reset, and report-generation tests.
+The automated end-to-end suite exercises lifecycle, fault activation, reset,
+and report generation over real local HTTP. Docker Compose separately provides
+the reproducible Demo Items and fault-proxy process boundary; a Compose smoke
+test will be added to CI before V1 completion.
 
 ### 20.4 CI policy
 
@@ -1341,16 +1357,18 @@ V1 is complete when:
 4. The runner never executes generated code.
 5. All three metamorphic relations and all three lifecycle consistency checks
    have unit tests and executable examples.
-6. All 12 PetClinic faults can be enabled independently and have reference
-   tests.
+6. All four frozen Demo Items faults can be enabled independently and have
+   reference tests.
 7. Three complete native-suite repetitions have been recorded.
 8. Comparison JSON and Markdown reports are generated from the same strict
    `EvaluationResult` artifacts.
 9. `uv run pytest` passes in a clean checkout.
-10. Docker Compose reproduces the PetClinic benchmark environment.
+10. Docker Compose reproduces the controlled Demo Items benchmark environment.
 11. CI succeeds without any LLM API key.
 12. A new user can reproduce the Schemathesis baseline from the README in ten
     minutes or less.
+13. The four-arm protocol is repeated against PetClinic as an external
+    validation benchmark.
 
 ## 24. Future Work
 

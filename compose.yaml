@@ -1,0 +1,64 @@
+name: oate-demo
+
+services:
+  demo-items:
+    build:
+      context: .
+    image: oate-demo-runtime:local
+    init: true
+    command:
+      - uvicorn
+      - services.demo_items.app:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --no-access-log
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/__test__/health', timeout=2)
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+  fault-proxy:
+    build:
+      context: .
+    image: oate-demo-runtime:local
+    init: true
+    command:
+      - uvicorn
+      - services.fault_proxy.app:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
+      - --no-access-log
+    environment:
+      OATE_FAULT_PROXY_UPSTREAM: http://demo-items:8000
+      OATE_FAULT_PROXY_FAULTS: /app/benchmarks/demo_items/faults
+    depends_on:
+      demo-items:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8001:8001"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8001/__oate__/state', timeout=2)
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
