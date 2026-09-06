@@ -58,6 +58,7 @@
         "exists",
         "contains",
         "length_is",
+        "items_unique_by",
         "greater_than",
         "matches_pattern"
       ],

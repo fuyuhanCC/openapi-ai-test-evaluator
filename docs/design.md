@@ -6,7 +6,7 @@
 | --- | --- |
 | Status | V1 implementation in progress |
 | Version | 1.2 |
-| Last updated | 2026-09-02 |
+| Last updated | 2026-09-03 |
 | Primary benchmark | Demo Items (controlled); Spring PetClinic REST planned as external validation |
 | LLM providers | Extensible provider interface; DeepSeek implemented first |
 | Conventional baseline | Schemathesis stateless adapter implemented |
@@ -239,13 +239,14 @@ Implemented as of 2026-08-27:
 - A Docker Compose environment for the Demo Items API and fault proxy, using a
   shared pinned Python/uv image, dependency-aware startup, and service health
   checks.
+- GitHub Actions quality and benchmark-replay jobs that require no provider
+  credential and verify generated schemas plus frozen input hashes.
 - Legacy hand-authored `TestPlan` validation and execution compatibility.
 
 Still required for the V1 experiment:
 
 - PetClinic benchmark packaging and deterministic reset workflow.
 - PetClinic fault catalog and reference trigger/observability tests.
-- CI workflows, including a Docker build and health-check smoke test.
 
 ## 8. Core Data Contracts
 
@@ -1306,15 +1307,16 @@ provider. Provider behavior is tested with recorded or mocked responses.
 
 The automated end-to-end suite exercises lifecycle, fault activation, reset,
 and report generation over real local HTTP. Docker Compose separately provides
-the reproducible Demo Items and fault-proxy process boundary; a Compose smoke
-test will be added to CI before V1 completion.
+the reproducible Demo Items and fault-proxy process boundary. CI rebuilds this
+environment and replays the complete frozen Demo Items benchmark.
 
 ### 20.4 CI policy
 
-Pull-request CI does not call live LLM APIs. It runs linting, unit tests,
-fixture integration tests, schema checks, and Docker build checks. A real-model
-benchmark is manual and uses repository secrets; it is never required for an
-untrusted pull request.
+Pull-request CI does not call live LLM APIs. It runs linting, formatting checks,
+the complete automated test suite, generated-schema freshness checks, frozen
+input integrity checks, and the Docker benchmark replay. Live-model generation
+is a separate manual preparation step and is never required for an untrusted
+pull request.
 
 ## 21. Security Constraints
 

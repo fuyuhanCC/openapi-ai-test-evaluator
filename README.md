@@ -1,5 +1,7 @@
 # OpenAPI AI Test Generation and Fault Evaluation Framework
 
+[![CI](https://github.com/fuyuhanCC/openapi-ai-test-evaluator/actions/workflows/ci.yml/badge.svg)](https://github.com/fuyuhanCC/openapi-ai-test-evaluator/actions/workflows/ci.yml)
+
 An experimental framework for generating declarative API tests from OpenAPI
 documents and evaluating their fault-detection capability with deterministic
 oracles.
@@ -13,8 +15,8 @@ oracles.
 > orchestration, single-suite evaluation, and multi-repetition comparison
 > reports are implemented and exercised in a three-repetition, four-arm Demo
 > Items experiment. Docker Compose reproduces the two-service local test
-> environment; CI packaging and an external PetClinic benchmark remain to be
-> implemented.
+> environment, and CI validates the code and replays the frozen benchmark
+> without an API key. An external PetClinic benchmark remains to be implemented.
 
 ## Experiment snapshot
 
@@ -82,6 +84,9 @@ the full interpretation.
 - A Docker Compose environment that builds one pinned Python/uv image, starts
   the Demo Items API and fault proxy in dependency order, and exposes health
   checks for both services.
+- GitHub Actions jobs that run linting, formatting, all automated tests, schema
+  freshness and frozen-input integrity checks, then rebuild the Docker
+  environment and replay the complete benchmark without an LLM API key.
 - A strict four-fault Demo Items catalog with reference tests proving that each
   fault is triggerable and produces an observable response difference.
 - Clean-versus-fault suite orchestration that resets the SUT, executes the same
